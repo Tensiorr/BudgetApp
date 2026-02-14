@@ -11,11 +11,5 @@ data class Transaction(
     val amountInCents: Int,
     val type: TransactionType,
     val date: LocalDate,
-    val comment: String?,
+    val comment: String?
 )
-
-
-enum class TransactionType {
-    EXPENSE,
-    INCOME
-}
