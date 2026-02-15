@@ -12,13 +12,20 @@ import androidx.compose.runtime.*
 import androidx.compose.material3.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionType
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.Calendar
 import kotlin.math.roundToInt
+import android.app.DatePickerDialog
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.graphics.Color
+
 
 @Composable
 fun AddTransactionScreen(onSave: (Transaction) -> Unit) {
@@ -26,6 +33,23 @@ fun AddTransactionScreen(onSave: (Transaction) -> Unit) {
     var type by remember { mutableStateOf(TransactionType.EXPENSE) }
     var date by remember { mutableStateOf(LocalDate.now()) }
     var comment by remember { mutableStateOf("") }
+
+    val context = LocalContext.current
+
+    val datePickerDialog = remember {
+        val calendar = Calendar.getInstance()
+        calendar.time = java.util.Date.from(date.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant())
+
+        DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                date = LocalDate.of(year, month + 1, dayOfMonth)
+            },
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH),
+            calendar.get(Calendar.DAY_OF_MONTH)
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -65,14 +89,22 @@ fun AddTransactionScreen(onSave: (Transaction) -> Unit) {
             )
             Text("Przychód")
         }
+        Box {
+            OutlinedTextField(
+                value = date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")),
+                onValueChange = { },
+                label = { Text("Data") },
+                readOnly = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Surface(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable { datePickerDialog.show() },
+                color = Color.Transparent
+            ) { }
+        }
 
-        OutlinedTextField(
-            value = date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")),
-            onValueChange = { },
-            label = { Text("Data") },
-            enabled = false,
-            modifier = Modifier.fillMaxWidth()
-        )
 
         OutlinedTextField(
             value = comment,
