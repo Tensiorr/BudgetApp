@@ -6,10 +6,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionType
+import com.tensiorr.budgetapp.ui.theme.Green
+import com.tensiorr.budgetapp.ui.theme.Red
 import java.time.format.DateTimeFormatter
 
 @Composable
@@ -34,9 +35,9 @@ fun TransactionItem(transaction: Transaction) {
     }
 
     val color = if (transaction.type == TransactionType.INCOME) {
-        Color.Green
+        Green
     } else {
-        Color.Red
+        Red
     }
 
     Card(
