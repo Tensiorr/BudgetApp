@@ -18,6 +18,7 @@ import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionType
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
 
 @Composable
 fun AddTransactionScreen(onSave: (Transaction) -> Unit) {
@@ -39,7 +40,12 @@ fun AddTransactionScreen(onSave: (Transaction) -> Unit) {
 
         OutlinedTextField(
             value = amount,
-            onValueChange = { amount = it },
+            onValueChange = { newValue ->
+                val normalized = newValue.replace(',', '.')
+                if (normalized.isEmpty() || normalized.matches(Regex("^\\d*\\.?\\d{0,2}$"))) {
+                    amount = newValue
+                }
+            },
             label = { Text("Kwota (PLN)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth()
@@ -79,7 +85,7 @@ fun AddTransactionScreen(onSave: (Transaction) -> Unit) {
 
         Button(
             onClick = {
-                val amountInCents = (amount.toDoubleOrNull()?.times(100))?.toInt() ?: 0
+                val amountInCents = (amount.replace(',', '.').toDoubleOrNull()?.times(100))?.roundToInt() ?: 0
                 if (amountInCents > 0) {
                     val transaction = Transaction(
                         amountInCents = amountInCents,

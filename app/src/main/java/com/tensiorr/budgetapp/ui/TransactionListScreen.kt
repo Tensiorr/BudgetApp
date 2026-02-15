@@ -9,19 +9,36 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionType
+import com.tensiorr.budgetapp.ui.theme.Black
 import com.tensiorr.budgetapp.ui.theme.Green
 import com.tensiorr.budgetapp.ui.theme.Red
 import java.time.format.DateTimeFormatter
 
 @Composable
 fun TransactionListScreen(transactions: List<Transaction>) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp)
-    ) {
-        items(transactions) { transaction ->
-            TransactionItem(transaction)
-            Spacer(modifier = Modifier.height(8.dp))
+    val balance = CalculateBalance(transactions)
+    Column(modifier = Modifier.fillMaxSize()) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "Saldo: ${balance / 100.0} PLN",
+                style = MaterialTheme.typography.headlineMedium,
+                color = if (balance > 0) Green else if (balance < 0) Red else Black,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp)
+        ) {
+            items(transactions) { transaction ->
+                TransactionItem(transaction)
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         }
     }
 }
@@ -63,4 +80,17 @@ fun TransactionItem(transaction: Transaction) {
             }
         }
     }
+}
+
+fun CalculateBalance(transactions: List<Transaction>): Int {
+    var balance: Int = 0
+    transactions.forEach { transaction ->
+        if (transaction.type == TransactionType.INCOME) {
+            balance += transaction.amountInCents
+        }
+        else {
+            balance -= transaction.amountInCents
+        }
+    }
+    return balance
 }
