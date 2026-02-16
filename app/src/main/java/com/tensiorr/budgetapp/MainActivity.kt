@@ -67,9 +67,17 @@ fun BudgetAppNavigation(dao: TransactionDao, tagDao: TagDao) {
         Box(modifier = Modifier.padding(paddingValues)) {
             when (selectedTab) {
                 0 -> {
+                    val scope = rememberCoroutineScope()
                     val transactionsWithTags = dao.getAllTransactionsWithTags()
                         .collectAsState(initial = emptyList())
-                    TransactionListScreen(transactionsWithTags = transactionsWithTags.value)
+                    TransactionListScreen(
+                        transactionsWithTags = transactionsWithTags.value,
+                        onDelete = { transaction ->
+                            scope.launch {
+                                dao.delete(transaction)
+                            }
+                        }
+                    )
                 }
                 1 -> {
                     val scope = rememberCoroutineScope()

@@ -1,11 +1,16 @@
 package com.tensiorr.budgetapp.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.tensiorr.budgetapp.data.entity.Tag
 import com.tensiorr.budgetapp.data.entity.Transaction
@@ -15,10 +20,14 @@ import com.tensiorr.budgetapp.ui.theme.Black
 import com.tensiorr.budgetapp.ui.theme.Green
 import com.tensiorr.budgetapp.ui.theme.Red
 import java.time.format.DateTimeFormatter
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 
 @Composable
-fun TransactionListScreen(transactionsWithTags: List<TransactionWithTags>) {
+fun TransactionListScreen(transactionsWithTags: List<TransactionWithTags>, onDelete: (Transaction) -> Unit) {
     val balance = CalculateBalance(transactionsWithTags.map { it.transaction })
+    var transactionToDelete by remember { mutableStateOf<Transaction?>(null) }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Card(
             modifier = Modifier
@@ -37,14 +46,44 @@ fun TransactionListScreen(transactionsWithTags: List<TransactionWithTags>) {
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp)
         ) {
-            items(transactionsWithTags) { transactionWithTags ->
-                TransactionItem(
-                    transaction = transactionWithTags.transaction,
-                    tags = transactionWithTags.tags
-                )
+            items(
+                items = transactionsWithTags,
+                key = { it.transaction.id }
+            ) { transactionWithTags ->
+                SwipeToDeleteItem(
+                    onDelete = { transactionToDelete = transactionWithTags.transaction }
+                ) {
+                    TransactionItem(
+                        transaction = transactionWithTags.transaction,
+                        tags = transactionWithTags.tags
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
+    }
+
+    transactionToDelete?.let { transaction ->
+        AlertDialog(
+            onDismissRequest = { transactionToDelete = null },
+            title = { Text("Usuń transakcję") },
+            text = { Text("Czy na pewno chcesz usunąć tę transakcję?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete(transaction)
+                        transactionToDelete = null
+                    }
+                ) {
+                    Text("Usuń", color = Color.Red)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { transactionToDelete = null }) {
+                    Text("Anuluj")
+                }
+            }
+        )
     }
 }
 
@@ -114,4 +153,44 @@ fun CalculateBalance(transactions: List<Transaction>): Int {
         }
     }
     return balance
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SwipeToDeleteItem(
+    onDelete: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { dismissValue ->
+            if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
+                onDelete()
+                false
+            } else {
+                false
+            }
+        }
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        backgroundContent = {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Red)
+                    .padding(16.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Usuń",
+                    tint = Color.White
+                )
+            }
+        }
+    ) {
+        content()
+    }
 }
