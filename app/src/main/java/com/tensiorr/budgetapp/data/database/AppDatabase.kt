@@ -18,7 +18,7 @@ import com.tensiorr.budgetapp.data.entity.TransactionTagCrossRef
         Tag::class,
         TransactionTagCrossRef::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

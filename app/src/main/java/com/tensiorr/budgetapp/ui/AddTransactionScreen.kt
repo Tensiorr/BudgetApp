@@ -24,15 +24,21 @@ import kotlin.math.roundToInt
 import android.app.DatePickerDialog
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.ui.graphics.Color
 
 
 @Composable
-fun AddTransactionScreen(onSave: (Transaction) -> Unit) {
+fun AddTransactionScreen(onSave: (Transaction, List<String>) -> Unit) {
     var amount by remember { mutableStateOf("") }
     var type by remember { mutableStateOf(TransactionType.EXPENSE) }
     var date by remember { mutableStateOf(LocalDate.now()) }
     var comment by remember { mutableStateOf("") }
+
+    var selectedTags by remember { mutableStateOf(listOf<String>()) }
+    var newTagName by remember { mutableStateOf("") }
 
     val context = LocalContext.current
 
@@ -89,6 +95,48 @@ fun AddTransactionScreen(onSave: (Transaction) -> Unit) {
             )
             Text("Przychód")
         }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = newTagName,
+                onValueChange = { newTagName = it },
+                label = { Text("Dodaj tag") },
+                modifier = Modifier.weight(1f)
+            )
+            Button(
+
+                onClick = {
+                    if (newTagName.isNotBlank()) {
+                        selectedTags = selectedTags + newTagName.trim()
+                        newTagName = ""
+                    }
+                }
+            ) {
+                Text("Dodaj")
+            }
+        }
+
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            selectedTags.forEach { tag ->
+                AssistChip(
+                    onClick = {
+                        selectedTags = selectedTags - tag  // Usuń tag po kliknięciu
+                    },
+                    label = { Text(tag) },
+                    trailingIcon = {
+                        Icon(Icons.Default.Close, contentDescription = "Usuń")
+                    }
+                )
+            }
+        }
+
         Box {
             OutlinedTextField(
                 value = date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")),
@@ -104,7 +152,6 @@ fun AddTransactionScreen(onSave: (Transaction) -> Unit) {
                 color = Color.Transparent
             ) { }
         }
-
 
         OutlinedTextField(
             value = comment,
@@ -125,7 +172,7 @@ fun AddTransactionScreen(onSave: (Transaction) -> Unit) {
                         date = date,
                         comment = comment.ifBlank { null }
                     )
-                    onSave(transaction)
+                    onSave(transaction, selectedTags)
                 }
             },
             modifier = Modifier.fillMaxWidth()

@@ -16,8 +16,11 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Icon
+import com.tensiorr.budgetapp.data.dao.TagDao
 import com.tensiorr.budgetapp.data.dao.TransactionDao
 import com.tensiorr.budgetapp.data.database.AppDatabase
+import com.tensiorr.budgetapp.data.entity.Tag
+import com.tensiorr.budgetapp.data.entity.TransactionTagCrossRef
 import com.tensiorr.budgetapp.ui.AddTransactionScreen
 import com.tensiorr.budgetapp.ui.TransactionListScreen
 import com.tensiorr.budgetapp.ui.theme.BudgetAppTheme
@@ -29,9 +32,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val db = AppDatabase.getDatabase(this)
         val dao = db.transactionDao()
+        val tagDao = db.tagDao()
         setContent {
             BudgetAppTheme {
-                BudgetAppNavigation(dao = dao)
+                BudgetAppNavigation(dao = dao, tagDao = tagDao)
             }
         }
     }
@@ -39,7 +43,7 @@ class MainActivity : ComponentActivity() {
 
 
 @Composable
-fun BudgetAppNavigation(dao: TransactionDao) {
+fun BudgetAppNavigation(dao: TransactionDao, tagDao: TagDao) {
     var selectedTab by remember { mutableIntStateOf(0) }
 
     Scaffold(
@@ -63,17 +67,32 @@ fun BudgetAppNavigation(dao: TransactionDao) {
         Box(modifier = Modifier.padding(paddingValues)) {
             when (selectedTab) {
                 0 -> {
-                    val transactions = dao.getAllTransactions()
+                    val transactionsWithTags = dao.getAllTransactionsWithTags()
                         .collectAsState(initial = emptyList())
-                    TransactionListScreen(transactions = transactions.value)
+                    TransactionListScreen(transactionsWithTags = transactionsWithTags.value)
                 }
                 1 -> {
                     val scope = rememberCoroutineScope()
-                    AddTransactionScreen(onSave = { transaction ->
+                    AddTransactionScreen(onSave = { transaction, tagNames ->
                         scope.launch {
-                            dao.insert(transaction)
+                            val transactionId = dao.insert(transaction)
+
+                            tagNames.forEach { tagName ->
+                                var tag = tagDao.getTagByNameAndType(tagName, transaction.type)
+
+                                if (tag == null) {
+                                    val tagId = tagDao.insertTag(
+                                        Tag(name = tagName, transactionType = transaction.type)
+                                    )
+                                    tag = Tag(id = tagId, name = tagName, transactionType = transaction.type)
+                                }
+
+                                tagDao.insertTransactionTagCrossRef(
+                                    TransactionTagCrossRef(transactionId, tag.id)
+                                )
+                            }
+                            selectedTab = 0
                         }
-                        selectedTab = 0
                     })
                 }
             }
