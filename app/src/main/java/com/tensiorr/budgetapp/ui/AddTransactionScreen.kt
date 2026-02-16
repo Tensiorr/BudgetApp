@@ -32,6 +32,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 
 @Composable
@@ -77,96 +79,96 @@ fun AddTransactionScreen(tagDao: TagDao, onSave: (Transaction, List<String>) -> 
         )
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
+    Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = "Nowa transakcja",
-            style = MaterialTheme.typography.headlineMedium
-        )
-
-        OutlinedTextField(
-            value = amount,
-            onValueChange = { newValue ->
-                val normalized = newValue.replace(',', '.')
-                if (normalized.isEmpty() || normalized.matches(Regex("^\\d*\\.?\\d{0,2}$"))) {
-                    amount = newValue
-                }
-            },
-            label = { Text("Kwota (PLN)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Wydatek")
-            Switch(
-                checked = type == TransactionType.INCOME,
-                onCheckedChange = { isIncome ->
-                    type = if (isIncome) TransactionType.INCOME else TransactionType.EXPENSE
-                }
+            Text(
+                text = "Nowa transakcja",
+                style = MaterialTheme.typography.headlineMedium
             )
-            Text("Przychód")
-        }
 
-        OutlinedButton(
-            onClick = {
-                tempSelectedTags = selectedTags
-                showTagDialog = true
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Default.Add, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("Dodaj kategorie")
-        }
-
-        if (selectedTags.isNotEmpty()) {
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                selectedTags.forEach { tag ->
-                    AssistChip(
-                        onClick = { selectedTags = selectedTags - tag },
-                        label = { Text(tag) }
-                    )
-                }
-            }
-        }
-
-        Box {
             OutlinedTextField(
-                value = date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")),
-                onValueChange = { },
-                label = { Text("Data") },
-                readOnly = true,
+                value = amount,
+                onValueChange = { newValue ->
+                    val normalized = newValue.replace(',', '.')
+                    if (normalized.isEmpty() || normalized.matches(Regex("^\\d*\\.?\\d{0,2}$"))) {
+                        amount = newValue
+                    }
+                },
+                label = { Text("Kwota (PLN)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth()
             )
-            Surface(
-                modifier = Modifier
-                    .matchParentSize()
-                    .clickable { datePickerDialog.show() },
-                color = Color.Transparent
-            ) { }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Wydatek")
+                Switch(
+                    checked = type == TransactionType.INCOME,
+                    onCheckedChange = { isIncome ->
+                        type = if (isIncome) TransactionType.INCOME else TransactionType.EXPENSE
+                    }
+                )
+                Text("Przychód")
+            }
+
+            OutlinedButton(
+                onClick = {
+                    tempSelectedTags = selectedTags
+                    showTagDialog = true
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Dodaj kategorie")
+            }
+
+            if (selectedTags.isNotEmpty()) {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    selectedTags.forEach { tag ->
+                        AssistChip(
+                            onClick = { selectedTags = selectedTags - tag },
+                            label = { Text(tag) }
+                        )
+                    }
+                }
+            }
+
+            Box {
+                OutlinedTextField(
+                    value = date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")),
+                    onValueChange = { },
+                    label = { Text("Data") },
+                    readOnly = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Surface(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable { datePickerDialog.show() },
+                    color = Color.Transparent
+                ) { }
+            }
+
+            OutlinedTextField(
+                value = comment,
+                onValueChange = { comment = it },
+                label = { Text("Komentarz (opcjonalnie)") },
+                modifier = Modifier.fillMaxWidth()
+            )
         }
-
-        OutlinedTextField(
-            value = comment,
-            onValueChange = { comment = it },
-            label = { Text("Komentarz (opcjonalnie)") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.weight(1f))
-
         Button(
             onClick = {
                 val amountInCents = (amount.replace(',', '.').toDoubleOrNull()?.times(100))?.roundToInt() ?: 0
@@ -185,6 +187,8 @@ fun AddTransactionScreen(tagDao: TagDao, onSave: (Transaction, List<String>) -> 
             Text("Zapisz")
         }
     }
+
+
 
     if (showTagDialog) {
         AlertDialog(
