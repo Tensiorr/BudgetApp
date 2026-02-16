@@ -26,19 +26,39 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.ui.graphics.Color
+import com.tensiorr.budgetapp.data.dao.TagDao
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 
 
 @Composable
-fun AddTransactionScreen(onSave: (Transaction, List<String>) -> Unit) {
+fun AddTransactionScreen(tagDao: TagDao, onSave: (Transaction, List<String>) -> Unit) {
     var amount by remember { mutableStateOf("") }
     var type by remember { mutableStateOf(TransactionType.EXPENSE) }
     var date by remember { mutableStateOf(LocalDate.now()) }
     var comment by remember { mutableStateOf("") }
 
     var selectedTags by remember { mutableStateOf(listOf<String>()) }
-    var newTagName by remember { mutableStateOf("") }
+    var tempSelectedTags by remember { mutableStateOf(listOf<String>()) }
+
+    var newTagInDialog by remember { mutableStateOf("") }
+
+    var showTagDialog by remember { mutableStateOf(false) }
+    var showNewTagDialog by remember { mutableStateOf(false) }
+
+    val existingTags = tagDao.getAllTags()
+        .collectAsState(initial = emptyList())
+        .value
+        .filter { it.transactionType == type }
+
+    val allAvailableTags = remember(existingTags, tempSelectedTags) {
+        val dbTagNames = existingTags.map { it.name }
+        val newTags = tempSelectedTags.filter { !dbTagNames.contains(it) }
+        existingTags.map { it.name } + newTags
+    }
 
     val context = LocalContext.current
 
@@ -96,44 +116,29 @@ fun AddTransactionScreen(onSave: (Transaction, List<String>) -> Unit) {
             Text("Przychód")
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        OutlinedButton(
+            onClick = {
+                tempSelectedTags = selectedTags
+                showTagDialog = true
+            },
+            modifier = Modifier.fillMaxWidth()
         ) {
-            OutlinedTextField(
-                value = newTagName,
-                onValueChange = { newTagName = it },
-                label = { Text("Dodaj tag") },
-                modifier = Modifier.weight(1f)
-            )
-            Button(
-
-                onClick = {
-                    if (newTagName.isNotBlank()) {
-                        selectedTags = selectedTags + newTagName.trim()
-                        newTagName = ""
-                    }
-                }
-            ) {
-                Text("Dodaj")
-            }
+            Icon(Icons.Default.Add, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Dodaj kategorie")
         }
 
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            selectedTags.forEach { tag ->
-                AssistChip(
-                    onClick = {
-                        selectedTags = selectedTags - tag  // Usuń tag po kliknięciu
-                    },
-                    label = { Text(tag) },
-                    trailingIcon = {
-                        Icon(Icons.Default.Close, contentDescription = "Usuń")
-                    }
-                )
+        if (selectedTags.isNotEmpty()) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                selectedTags.forEach { tag ->
+                    AssistChip(
+                        onClick = { selectedTags = selectedTags - tag },
+                        label = { Text(tag) }
+                    )
+                }
             }
         }
 
@@ -179,5 +184,95 @@ fun AddTransactionScreen(onSave: (Transaction, List<String>) -> Unit) {
         ) {
             Text("Zapisz")
         }
+    }
+
+    if (showTagDialog) {
+        AlertDialog(
+            onDismissRequest = { showTagDialog = false },
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Wybierz kategorie")
+                    IconButton(onClick = { showNewTagDialog = true }) {
+                        Icon(Icons.Default.Add, contentDescription = "Nowa kategoria")
+                    }
+                }
+            },
+            text = {
+                LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                    items(allAvailableTags) { tagName ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = tempSelectedTags.contains(tagName),
+                                onCheckedChange = { checked ->
+                                    tempSelectedTags = if (checked) {
+                                        tempSelectedTags + tagName
+                                    } else {
+                                        tempSelectedTags - tagName
+                                    }
+                                }
+                            )
+                            Text(tagName)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    selectedTags = tempSelectedTags
+                    showTagDialog = false
+                }) {
+                    Text("Dodaj")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTagDialog = false }) {
+                    Text("Anuluj")
+                }
+            }
+        )
+    }
+
+    if (showNewTagDialog) {
+        AlertDialog(
+            onDismissRequest = { showNewTagDialog = false },
+            title = { Text("Nowa kategoria") },
+            text = {
+                OutlinedTextField(
+                    value = newTagInDialog,
+                    onValueChange = { newTagInDialog = it },
+                    label = { Text("Nazwa kategorii") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (newTagInDialog.isNotBlank() && !tempSelectedTags.contains(newTagInDialog.trim())) {
+                            tempSelectedTags = tempSelectedTags + newTagInDialog.trim()
+                            newTagInDialog = ""
+                            showNewTagDialog = false
+                        }
+                    }
+                ) {
+                    Text("Dodaj")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    newTagInDialog = ""
+                    showNewTagDialog = false
+                }) {
+                    Text("Anuluj")
+                }
+            }
+        )
     }
 }

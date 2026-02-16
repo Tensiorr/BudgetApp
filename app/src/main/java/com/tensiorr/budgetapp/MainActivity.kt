@@ -73,7 +73,7 @@ fun BudgetAppNavigation(dao: TransactionDao, tagDao: TagDao) {
                 }
                 1 -> {
                     val scope = rememberCoroutineScope()
-                    AddTransactionScreen(onSave = { transaction, tagNames ->
+                    AddTransactionScreen(tagDao = tagDao, onSave = { transaction, tagNames ->
                         scope.launch {
                             val transactionId = dao.insert(transaction)
 
