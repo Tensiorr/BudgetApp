@@ -68,8 +68,13 @@ fun BudgetAppNavigation(db: AppDatabase) {
                     val scope = rememberCoroutineScope()
                     val transactionsWithTags = dao.getAllTransactionsWithTags()
                         .collectAsState(initial = emptyList())
+
+                    val categories = categoryDao.getAllCategories()
+                        .collectAsState(initial = emptyList())
+
                     TransactionListScreen(
                         transactionsWithTags = transactionsWithTags.value,
+                        categories = categories.value,
                         onDelete = { transaction ->
                             scope.launch {
                                 dao.delete(transaction)
