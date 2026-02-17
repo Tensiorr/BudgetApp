@@ -1,72 +1,88 @@
 package com.tensiorr.budgetapp.ui
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.runtime.*
-import androidx.compose.material3.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
-import com.tensiorr.budgetapp.data.entity.Transaction
-import com.tensiorr.budgetapp.data.entity.TransactionType
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Calendar
-import kotlin.math.roundToInt
 import android.app.DatePickerDialog
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.material.icons.Icons
-import androidx.compose.ui.graphics.Color
-import com.tensiorr.budgetapp.data.dao.TagDao
-import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import com.tensiorr.budgetapp.data.dao.CategoryDao
+import com.tensiorr.budgetapp.data.dao.TagDao
+import com.tensiorr.budgetapp.data.entity.Category
+import com.tensiorr.budgetapp.data.entity.Tag
+import com.tensiorr.budgetapp.data.entity.Transaction
+import com.tensiorr.budgetapp.data.entity.TransactionType
+import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Calendar
+import kotlin.math.roundToInt
 
-
+/**
+ * Screen for adding new transactions with two-level category/tag selection.
+ *
+ * Flow:
+ * 1. User fills in amount, type, date, and optional comment
+ * 2. User selects category → then selects tag from that category
+ * 3. On save, creates transaction with optional tag relationship
+ */
 @Composable
-fun AddTransactionScreen(tagDao: TagDao, onSave: (Transaction, List<String>) -> Unit) {
+fun AddTransactionScreen(
+    categoryDao: CategoryDao,
+    tagDao: TagDao,
+    onSave: (Transaction, Long?) -> Unit
+) {
     var amount by remember { mutableStateOf("") }
     var type by remember { mutableStateOf(TransactionType.EXPENSE) }
     var date by remember { mutableStateOf(LocalDate.now()) }
     var comment by remember { mutableStateOf("") }
 
-    var selectedTags by remember { mutableStateOf(listOf<String>()) }
-    var tempSelectedTags by remember { mutableStateOf(listOf<String>()) }
+    var selectedCategoryId by remember { mutableStateOf<Long?>(null) }
+    var selectedTagId by remember { mutableStateOf<Long?>(null) }
 
-    var newTagInDialog by remember { mutableStateOf("") }
-
+    var showCategoryDialog by remember { mutableStateOf(false) }
     var showTagDialog by remember { mutableStateOf(false) }
+    var showNewCategoryDialog by remember { mutableStateOf(false) }
     var showNewTagDialog by remember { mutableStateOf(false) }
 
-    val existingTags = tagDao.getAllTags()
+    var newCategoryName by remember { mutableStateOf("") }
+    var newTagName by remember { mutableStateOf("") }
+
+    var snackbarMessage by remember { mutableStateOf<String?>(null) }
+
+    val categories = categoryDao.getCategoriesForType(type)
         .collectAsState(initial = emptyList())
-        .value
-        .filter { it.transactionType == type }
 
-    val allAvailableTags = remember(existingTags, tempSelectedTags) {
-        val dbTagNames = existingTags.map { it.name }
-        val newTags = tempSelectedTags.filter { !dbTagNames.contains(it) }
-        existingTags.map { it.name } + newTags
-    }
+    val tagsForCategory = remember(selectedCategoryId) {
+        if (selectedCategoryId != null) {
+            tagDao.getTagsForCategory(selectedCategoryId!!)
+        } else {
+            null
+        }
+    }?.collectAsState(initial = emptyList())
 
+    val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
     val datePickerDialog = remember {
         val calendar = Calendar.getInstance()
-        calendar.time = java.util.Date.from(date.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant())
+        calendar.time = java.util.Date.from(
+            date.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant()
+        )
 
         DatePickerDialog(
             context,
@@ -79,204 +95,375 @@ fun AddTransactionScreen(tagDao: TagDao, onSave: (Transaction, List<String>) -> 
         )
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = "Nowa transakcja",
-                style = MaterialTheme.typography.headlineMedium
-            )
-
-            OutlinedTextField(
-                value = amount,
-                onValueChange = { newValue ->
-                    val normalized = newValue.replace(',', '.')
-                    if (normalized.isEmpty() || normalized.matches(Regex("^\\d*\\.?\\d{0,2}$"))) {
-                        amount = newValue
-                    }
-                },
-                label = { Text("Kwota (PLN)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Wydatek")
-                Switch(
-                    checked = type == TransactionType.INCOME,
-                    onCheckedChange = { isIncome ->
-                        type = if (isIncome) TransactionType.INCOME else TransactionType.EXPENSE
-                    }
-                )
-                Text("Przychód")
-            }
-
-            OutlinedButton(
-                onClick = {
-                    tempSelectedTags = selectedTags
-                    showTagDialog = true
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Dodaj kategorie")
-            }
-
-            if (selectedTags.isNotEmpty()) {
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    selectedTags.forEach { tag ->
-                        AssistChip(
-                            onClick = { selectedTags = selectedTags - tag },
-                            label = { Text(tag) }
-                        )
-                    }
-                }
-            }
-
-            Box {
-                OutlinedTextField(
-                    value = date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")),
-                    onValueChange = { },
-                    label = { Text("Data") },
-                    readOnly = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Surface(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clickable { datePickerDialog.show() },
-                    color = Color.Transparent
-                ) { }
-            }
-
-            OutlinedTextField(
-                value = comment,
-                onValueChange = { comment = it },
-                label = { Text("Komentarz (opcjonalnie)") },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        Button(
-            onClick = {
-                val amountInCents = (amount.replace(',', '.').toDoubleOrNull()?.times(100))?.roundToInt() ?: 0
-                if (amountInCents > 0) {
-                    val transaction = Transaction(
-                        amountInCents = amountInCents,
-                        type = type,
-                        date = date,
-                        comment = comment.ifBlank { null }
-                    )
-                    onSave(transaction, selectedTags)
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Zapisz")
-        }
+    fun showMessage(message: String) {
+        snackbarMessage = message
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Nowa transakcja",
+                    style = MaterialTheme.typography.headlineMedium
+                )
 
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { newValue ->
+                        val normalized = newValue.replace(',', '.')
+                        if (normalized.isEmpty() ||
+                            normalized.matches(Regex("^\\d*\\.?\\d{0,2}$"))) {
+                            amount = newValue
+                        }
+                    },
+                    label = { Text("Kwota (PLN)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-    if (showTagDialog) {
-        AlertDialog(
-            onDismissRequest = { showTagDialog = false },
-            title = {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Wybierz kategorie")
-                    IconButton(onClick = { showNewTagDialog = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Nowa kategoria")
-                    }
-                }
-            },
-            text = {
-                LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                    items(allAvailableTags) { tagName ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = tempSelectedTags.contains(tagName),
-                                onCheckedChange = { checked ->
-                                    tempSelectedTags = if (checked) {
-                                        tempSelectedTags + tagName
-                                    } else {
-                                        tempSelectedTags - tagName
-                                    }
-                                }
-                            )
-                            Text(tagName)
+                    Text("Wydatek")
+                    Switch(
+                        checked = type == TransactionType.INCOME,
+                        onCheckedChange = { isIncome ->
+                            type = if (isIncome) TransactionType.INCOME
+                            else TransactionType.EXPENSE
+                            selectedCategoryId = null
+                            selectedTagId = null
                         }
+                    )
+                    Text("Przychód")
+                }
+
+                OutlinedButton(
+                    onClick = { showCategoryDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Dodaj kategorię")
+                }
+
+                selectedTagId?.let { tagId ->
+                    val tag = tagsForCategory?.value?.find { it.id == tagId }
+                    val category = categories.value.find { it.id == selectedCategoryId }
+
+                    if (tag != null && category != null) {
+                        AssistChip(
+                            onClick = {
+                                selectedTagId = null
+                                selectedCategoryId = null
+                            },
+                            label = { Text("${category.name} > ${tag.name}") },
+                            trailingIcon = {
+                                Icon(Icons.Default.Close, contentDescription = "Usuń")
+                            }
+                        )
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    selectedTags = tempSelectedTags
-                    showTagDialog = false
-                }) {
-                    Text("Dodaj")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTagDialog = false }) {
-                    Text("Anuluj")
-                }
-            }
-        )
-    }
 
-    if (showNewTagDialog) {
-        AlertDialog(
-            onDismissRequest = { showNewTagDialog = false },
-            title = { Text("Nowa kategoria") },
-            text = {
+                Box {
+                    OutlinedTextField(
+                        value = date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")),
+                        onValueChange = { },
+                        label = { Text("Data") },
+                        readOnly = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Surface(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable { datePickerDialog.show() },
+                        color = Color.Transparent
+                    ) { }
+                }
+
                 OutlinedTextField(
-                    value = newTagInDialog,
-                    onValueChange = { newTagInDialog = it },
-                    label = { Text("Nazwa kategorii") },
-                    singleLine = true,
+                    value = comment,
+                    onValueChange = { comment = it },
+                    label = { Text("Komentarz (opcjonalnie)") },
                     modifier = Modifier.fillMaxWidth()
                 )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (newTagInDialog.isNotBlank() && !tempSelectedTags.contains(newTagInDialog.trim())) {
-                            tempSelectedTags = tempSelectedTags + newTagInDialog.trim()
-                            newTagInDialog = ""
-                            showNewTagDialog = false
+            }
+
+            Button(
+                onClick = {
+                    val amountInCents = (amount.replace(',', '.')
+                        .toDoubleOrNull()
+                        ?.times(100))
+                        ?.roundToInt() ?: 0
+
+                    if (amountInCents > 0) {
+                        val transaction = Transaction(
+                            amountInCents = amountInCents,
+                            type = type,
+                            date = date,
+                            comment = comment.ifBlank { null }
+                        )
+                        onSave(transaction, selectedTagId)
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Text("Zapisz")
+            }
+        }
+
+        if (showCategoryDialog) {
+            AlertDialog(
+                onDismissRequest = { showCategoryDialog = false },
+                title = { Text("Wybierz kategorię") },
+                text = {
+                    LazyColumn {
+                        items(categories.value) { category ->
+                            TextButton(
+                                onClick = {
+                                    selectedCategoryId = category.id
+                                    showCategoryDialog = false
+                                    showTagDialog = true
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = category.name,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        item {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                            TextButton(
+                                onClick = {
+                                    showCategoryDialog = false
+                                    showNewCategoryDialog = true
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Nowa kategoria")
+                            }
                         }
                     }
-                ) {
-                    Text("Dodaj")
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = { showCategoryDialog = false }) {
+                        Text("Anuluj")
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    newTagInDialog = ""
-                    showNewTagDialog = false
-                }) {
-                    Text("Anuluj")
+            )
+        }
+
+        if (showTagDialog && selectedCategoryId != null) {
+            val categoryName = categories.value
+                .find { it.id == selectedCategoryId }?.name ?: ""
+
+            AlertDialog(
+                onDismissRequest = { showTagDialog = false },
+                title = { Text("Wybierz tag z kategorii \"$categoryName\"") },
+                text = {
+                    LazyColumn {
+                        tagsForCategory?.value?.let { tags ->
+                            items(tags) { tag ->
+                                TextButton(
+                                    onClick = {
+                                        selectedTagId = tag.id
+                                        showTagDialog = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = tag.name,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
+                        }
+
+                        item {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                            TextButton(
+                                onClick = {
+                                    showTagDialog = false
+                                    showNewTagDialog = true
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Nowy tag")
+                            }
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = {
+                        showTagDialog = false
+                        selectedCategoryId = null
+                    }) {
+                        Text("Wstecz")
+                    }
+                }
+            )
+        }
+
+        if (showNewCategoryDialog) {
+            AlertDialog(
+                onDismissRequest = { showNewCategoryDialog = false },
+                title = { Text("Nowa kategoria") },
+                text = {
+                    OutlinedTextField(
+                        value = newCategoryName,
+                        onValueChange = { newCategoryName = it },
+                        label = { Text("Nazwa kategorii") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (newCategoryName.isNotBlank()) {
+                                scope.launch {
+                                    val existing = categoryDao.getCategoryByNameAndType(
+                                        newCategoryName.trim(),
+                                        type
+                                    )
+
+                                    if (existing != null) {
+                                        selectedCategoryId = existing.id
+                                        val categoryName = existing.name
+                                        newCategoryName = ""
+                                        showNewCategoryDialog = false
+                                        showTagDialog = true
+                                        showMessage("Kategoria '$categoryName' już istnieje")
+                                    } else {
+                                        val categoryId = categoryDao.insert(
+                                            Category(
+                                                name = newCategoryName.trim(),
+                                                transactionType = type
+                                            )
+                                        )
+                                        selectedCategoryId = categoryId
+                                        newCategoryName = ""
+                                        showNewCategoryDialog = false
+                                        showTagDialog = true
+                                    }
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Dodaj")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        newCategoryName = ""
+                        showNewCategoryDialog = false
+                    }) {
+                        Text("Anuluj")
+                    }
+                }
+            )
+        }
+
+        if (showNewTagDialog && selectedCategoryId != null) {
+            AlertDialog(
+                onDismissRequest = { showNewTagDialog = false },
+                title = { Text("Nowy tag") },
+                text = {
+                    OutlinedTextField(
+                        value = newTagName,
+                        onValueChange = { newTagName = it },
+                        label = { Text("Nazwa tagu") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (newTagName.isNotBlank() && selectedCategoryId != null) {
+                                scope.launch {
+                                    val existing = tagDao.getTagByNameAndCategory(
+                                        newTagName.trim(),
+                                        selectedCategoryId!!
+                                    )
+
+                                    if (existing != null) {
+                                        selectedTagId = existing.id
+                                        val tagName = existing.name
+                                        newTagName = ""
+                                        showNewTagDialog = false
+                                        showMessage("Tag '$tagName' już istnieje w tej kategorii")
+                                    } else {
+                                        val tagId = tagDao.insertTag(
+                                            Tag(
+                                                name = newTagName.trim(),
+                                                categoryId = selectedCategoryId!!,
+                                                transactionType = type
+                                            )
+                                        )
+                                        selectedTagId = tagId
+                                        newTagName = ""
+                                        showNewTagDialog = false
+                                    }
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Dodaj")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        newTagName = ""
+                        showNewTagDialog = false
+                    }) {
+                        Text("Anuluj")
+                    }
+                }
+            )
+        }
+
+        snackbarMessage?.let { message ->
+            Dialog(onDismissRequest = { snackbarMessage = null }) {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.inverseSurface,
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = message,
+                            color = MaterialTheme.colorScheme.inverseOnSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = { snackbarMessage = null }) {
+                            Text("OK", color = MaterialTheme.colorScheme.inversePrimary)
+                        }
+                    }
                 }
             }
-        )
+        }
     }
 }

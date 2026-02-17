@@ -6,19 +6,22 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.tensiorr.budgetapp.data.Converters
+import com.tensiorr.budgetapp.data.dao.CategoryDao
 import com.tensiorr.budgetapp.data.dao.TagDao
 import com.tensiorr.budgetapp.data.dao.TransactionDao
 import com.tensiorr.budgetapp.data.entity.Tag
 import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionTagCrossRef
+import com.tensiorr.budgetapp.data.entity.Category
 
 @Database(
     entities = [
         Transaction::class,
         Tag::class,
-        TransactionTagCrossRef::class
+        TransactionTagCrossRef::class,
+        Category::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -26,6 +29,7 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun transactionDao(): TransactionDao
     abstract fun tagDao(): TagDao
+    abstract fun categoryDao(): CategoryDao
 
     companion object {
         @Volatile
@@ -37,7 +41,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "budget_database"
-                ).build()
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }

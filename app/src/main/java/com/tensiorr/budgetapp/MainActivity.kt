@@ -16,10 +16,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Icon
-import com.tensiorr.budgetapp.data.dao.TagDao
-import com.tensiorr.budgetapp.data.dao.TransactionDao
 import com.tensiorr.budgetapp.data.database.AppDatabase
-import com.tensiorr.budgetapp.data.entity.Tag
 import com.tensiorr.budgetapp.data.entity.TransactionTagCrossRef
 import com.tensiorr.budgetapp.ui.AddTransactionScreen
 import com.tensiorr.budgetapp.ui.TransactionListScreen
@@ -31,20 +28,21 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val db = AppDatabase.getDatabase(this)
-        val dao = db.transactionDao()
-        val tagDao = db.tagDao()
         setContent {
             BudgetAppTheme {
-                BudgetAppNavigation(dao = dao, tagDao = tagDao)
+                BudgetAppNavigation(db = db)
             }
         }
     }
 }
 
-
 @Composable
-fun BudgetAppNavigation(dao: TransactionDao, tagDao: TagDao) {
+fun BudgetAppNavigation(db: AppDatabase) {
     var selectedTab by remember { mutableIntStateOf(0) }
+
+    val dao = db.transactionDao()
+    val tagDao = db.tagDao()
+    val categoryDao = db.categoryDao()
 
     Scaffold(
         bottomBar = {
@@ -81,27 +79,23 @@ fun BudgetAppNavigation(dao: TransactionDao, tagDao: TagDao) {
                 }
                 1 -> {
                     val scope = rememberCoroutineScope()
-                    AddTransactionScreen(tagDao = tagDao, onSave = { transaction, tagNames ->
-                        scope.launch {
-                            val transactionId = dao.insert(transaction)
+                    AddTransactionScreen(
+                        categoryDao = categoryDao,
+                        tagDao = tagDao,
+                        onSave = { transaction, tagId ->
+                            scope.launch {
+                                val transactionId = dao.insert(transaction)
 
-                            tagNames.forEach { tagName ->
-                                var tag = tagDao.getTagByNameAndType(tagName, transaction.type)
-
-                                if (tag == null) {
-                                    val tagId = tagDao.insertTag(
-                                        Tag(name = tagName, transactionType = transaction.type)
+                                tagId?.let { id ->
+                                    tagDao.insertTransactionTagCrossRef(
+                                        TransactionTagCrossRef(transactionId, id)
                                     )
-                                    tag = Tag(id = tagId, name = tagName, transactionType = transaction.type)
                                 }
 
-                                tagDao.insertTransactionTagCrossRef(
-                                    TransactionTagCrossRef(transactionId, tag.id)
-                                )
+                                selectedTab = 0
                             }
-                            selectedTab = 0
                         }
-                    })
+                    )
                 }
             }
         }

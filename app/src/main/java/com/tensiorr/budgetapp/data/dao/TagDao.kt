@@ -14,6 +14,12 @@ interface TagDao {
     @Query("SELECT * FROM tags WHERE name = :name AND transactionType = :type")
     suspend fun getTagByNameAndType(name: String, type: TransactionType): Tag?
 
+    @Query("SELECT * FROM tags WHERE name = :name AND categoryId = :categoryId")
+    suspend fun getTagByNameAndCategory(name: String, categoryId: Long): Tag?
+
+    @Query("SELECT * FROM tags WHERE categoryId = :categoryId ORDER BY name ASC")
+    fun getTagsForCategory(categoryId: Long): Flow<List<Tag>>
+
     @Query("SELECT * FROM tags ORDER BY name ASC")
     fun getAllTags(): Flow<List<Tag>>
 
