@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material3.Text
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -21,9 +22,11 @@ import com.tensiorr.budgetapp.data.database.AppDatabase
 import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionTagCrossRef
 import com.tensiorr.budgetapp.ui.AddTransactionScreen
+import com.tensiorr.budgetapp.ui.SummaryScreen
 import com.tensiorr.budgetapp.ui.TransactionListScreen
 import com.tensiorr.budgetapp.ui.theme.BudgetAppTheme
 import kotlinx.coroutines.launch
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,6 +50,13 @@ fun BudgetAppNavigation(db: AppDatabase) {
     val tagDao = db.tagDao()
     val categoryDao = db.categoryDao()
 
+    val scope = rememberCoroutineScope()
+    val transactionsWithTags = dao.getAllTransactionsWithTags()
+        .collectAsState(initial = emptyList())
+
+    val categories = categoryDao.getAllCategories()
+        .collectAsState(initial = emptyList())
+
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -57,10 +67,16 @@ fun BudgetAppNavigation(db: AppDatabase) {
                     onClick = { selectedTab = 0 }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.Add, contentDescription = "Dodaj") },
-                    label = { Text("Dodaj") },
+                    icon = { Icon(Icons.Default.BarChart, contentDescription = "Zestawienia") },
+                    label = { Text("Zestawienia") },
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Add, contentDescription = "Dodaj") },
+                    label = { Text("Dodaj") },
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 }
                 )
             }
         }
@@ -72,7 +88,6 @@ fun BudgetAppNavigation(db: AppDatabase) {
                         transactionToEdit = null
                         selectedTab = 0
                     }
-
                     val scope = rememberCoroutineScope()
                     AddTransactionScreen(
                         categoryDao = categoryDao,
@@ -97,15 +112,7 @@ fun BudgetAppNavigation(db: AppDatabase) {
                         }
                     )
                 }
-
                 selectedTab == 0 -> {
-                    val scope = rememberCoroutineScope()
-                    val transactionsWithTags = dao.getAllTransactionsWithTags()
-                        .collectAsState(initial = emptyList())
-
-                    val categories = categoryDao.getAllCategories()
-                        .collectAsState(initial = emptyList())
-
                     TransactionListScreen(
                         transactionsWithTags = transactionsWithTags.value,
                         categories = categories.value,
@@ -119,12 +126,21 @@ fun BudgetAppNavigation(db: AppDatabase) {
                         }
                     )
                 }
-
                 selectedTab == 1 -> {
                     BackHandler {
                         selectedTab = 0
                     }
-
+                    SummaryScreen(
+                        transactionDao = dao,
+                        categoryDao = categoryDao,
+                        transactions = transactionsWithTags.value,
+                        categories = categories.value
+                    )
+                }
+                selectedTab == 2 -> {
+                    BackHandler {
+                        selectedTab = 0
+                    }
                     val scope = rememberCoroutineScope()
                     AddTransactionScreen(
                         categoryDao = categoryDao,
@@ -132,18 +148,17 @@ fun BudgetAppNavigation(db: AppDatabase) {
                         onSave = { transaction, tagId ->
                             scope.launch {
                                 val transactionId = dao.insert(transaction)
-
                                 tagId?.let { id ->
                                     tagDao.insertTransactionTagCrossRef(
                                         TransactionTagCrossRef(transactionId, id)
                                     )
                                 }
-
                                 selectedTab = 0
                             }
                         }
                     )
                 }
+
             }
         }
     }
