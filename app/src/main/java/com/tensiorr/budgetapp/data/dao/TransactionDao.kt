@@ -19,7 +19,7 @@ interface TransactionDao {
     suspend fun getTransactionWithTags(transactionId: Long): TransactionWithTags?
 
     @RoomTransaction
-    @Query("SELECT * FROM transactions ORDER BY date DESC")
+    @Query("SELECT * FROM transactions ORDER BY date DESC, id DESC")
     fun getAllTransactionsWithTags(): Flow<List<TransactionWithTags>>
 
     @Update

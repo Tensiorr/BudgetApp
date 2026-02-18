@@ -25,6 +25,7 @@ import java.time.format.DateTimeFormatter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.text.style.TextAlign
 
 /**
  * Screen displaying list of transactions with balance summary.
@@ -63,6 +64,22 @@ fun TransactionListScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp)
         ) {
+            if (transactionsWithTags.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Brak transakcji.\nDodaj pierwszą klikając zakładkę '+'",
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                }
+            }
             items(
                 items = transactionsWithTags,
                 key = { it.transaction.id }

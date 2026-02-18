@@ -232,6 +232,7 @@ fun AddTransactionScreen(
                         onSave(transaction, selectedTagId)
                     }
                 },
+                enabled = amount.isNotBlank() && amount.replace(',', '.').toDoubleOrNull() != null,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
