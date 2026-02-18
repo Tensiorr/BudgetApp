@@ -33,26 +33,35 @@ import java.util.Calendar
 import kotlin.math.roundToInt
 
 /**
- * Screen for adding new transactions with two-level category/tag selection.
+ * Screen for adding/editing transactions with two-level category/tag selection.
  *
  * Flow:
  * 1. User fills in amount, type, date, and optional comment
  * 2. User selects category → then selects tag from that category
- * 3. On save, creates transaction with optional tag relationship
+ * 3. On save, creates or updates transaction with optional tag relationship
+ *
+ * @param transactionToEdit If provided, enters edit mode and pre-fills fields
+ * @param existingTagId Tag ID associated with transaction being edited
  */
 @Composable
 fun AddTransactionScreen(
     categoryDao: CategoryDao,
     tagDao: TagDao,
+    transactionToEdit: Transaction? = null,
+    existingTagId: Long? = null,
     onSave: (Transaction, Long?) -> Unit
 ) {
-    var amount by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf(TransactionType.EXPENSE) }
-    var date by remember { mutableStateOf(LocalDate.now()) }
-    var comment by remember { mutableStateOf("") }
+    var amount by remember {
+        mutableStateOf(
+            transactionToEdit?.let { (it.amountInCents / 100.0).toString() } ?: ""
+        )
+    }
+    var type by remember { mutableStateOf(transactionToEdit?.type ?: TransactionType.EXPENSE) }
+    var date by remember { mutableStateOf(transactionToEdit?.date ?: LocalDate.now()) }
+    var comment by remember { mutableStateOf(transactionToEdit?.comment ?: "") }
 
     var selectedCategoryId by remember { mutableStateOf<Long?>(null) }
-    var selectedTagId by remember { mutableStateOf<Long?>(null) }
+    var selectedTagId by remember { mutableStateOf(existingTagId) }
 
     var showCategoryDialog by remember { mutableStateOf(false) }
     var showTagDialog by remember { mutableStateOf(false) }
@@ -74,6 +83,15 @@ fun AddTransactionScreen(
             null
         }
     }?.collectAsState(initial = emptyList())
+
+    LaunchedEffect(existingTagId, categories.value) {
+        if (existingTagId != null && selectedCategoryId == null && categories.value.isNotEmpty()) {
+            val tag = tagDao.getTagById(existingTagId)
+            tag?.let {
+                selectedCategoryId = it.categoryId
+            }
+        }
+    }
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -109,7 +127,7 @@ fun AddTransactionScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Nowa transakcja",
+                    text = if (transactionToEdit != null) "Edytuj transakcję" else "Nowa transakcja",
                     style = MaterialTheme.typography.headlineMedium
                 )
 
@@ -205,6 +223,7 @@ fun AddTransactionScreen(
 
                     if (amountInCents > 0) {
                         val transaction = Transaction(
+                            id = transactionToEdit?.id ?: 0,
                             amountInCents = amountInCents,
                             type = type,
                             date = date,

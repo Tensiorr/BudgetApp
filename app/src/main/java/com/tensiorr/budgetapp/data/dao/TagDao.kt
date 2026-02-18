@@ -23,9 +23,15 @@ interface TagDao {
     @Query("SELECT * FROM tags ORDER BY name ASC")
     fun getAllTags(): Flow<List<Tag>>
 
+    @Query("SELECT * FROM tags WHERE id = :tagId LIMIT 1")
+    suspend fun getTagById(tagId: Long): Tag?
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertTransactionTagCrossRef(crossRef: TransactionTagCrossRef)
 
     @Query("SELECT * FROM tags WHERE id IN (SELECT tagId FROM transaction_tag_cross_ref WHERE transactionId = :transactionId)")
     suspend fun getTagsForTransaction(transactionId: Long): List<Tag>
+
+    @Query("DELETE FROM transaction_tag_cross_ref WHERE transactionId = :transactionId")
+    suspend fun deleteTransactionTagCrossRefsForTransaction(transactionId: Long)
 }

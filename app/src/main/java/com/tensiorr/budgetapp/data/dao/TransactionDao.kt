@@ -22,6 +22,9 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions ORDER BY date DESC")
     fun getAllTransactionsWithTags(): Flow<List<TransactionWithTags>>
 
+    @Update
+    suspend fun update(transaction: Transaction)
+
     @Delete
     suspend fun delete(transaction: Transaction)
 }

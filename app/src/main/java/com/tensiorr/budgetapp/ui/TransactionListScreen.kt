@@ -1,6 +1,7 @@
 package com.tensiorr.budgetapp.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -38,7 +39,8 @@ import androidx.compose.foundation.layout.size
 fun TransactionListScreen(
     transactionsWithTags: List<TransactionWithTags>,
     categories: List<Category>,
-    onDelete: (Transaction) -> Unit
+    onDelete: (Transaction) -> Unit,
+    onEdit: (Transaction, Long?) -> Unit
 ) {
     val balance = CalculateBalance(transactionsWithTags.map { it.transaction })
     var transactionToDelete by remember { mutableStateOf<Transaction?>(null) }
@@ -71,7 +73,11 @@ fun TransactionListScreen(
                     TransactionItem(
                         transaction = transactionWithTags.transaction,
                         tags = transactionWithTags.tags,
-                        categories = categories
+                        categories = categories,
+                        onClick = {
+                            val tagId = transactionWithTags.tags.firstOrNull()?.id
+                            onEdit(transactionWithTags.transaction, tagId)
+                        }
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -110,7 +116,8 @@ fun TransactionListScreen(
 fun TransactionItem(
     transaction: Transaction,
     tags: List<Tag>,
-    categories: List<Category>
+    categories: List<Category>,
+    onClick: () -> Unit
 ) {
     val amountText = if (transaction.type == TransactionType.INCOME) {
         "+${transaction.amountInCents / 100.0} PLN"
@@ -125,7 +132,9 @@ fun TransactionItem(
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
@@ -150,7 +159,7 @@ fun TransactionItem(
                         }
 
                         AssistChip(
-                            onClick = { },
+                            onClick = onClick,
                             label = { Text(label, style = MaterialTheme.typography.labelSmall) }
                         )
                     }

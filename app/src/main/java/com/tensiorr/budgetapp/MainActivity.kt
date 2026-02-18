@@ -2,6 +2,7 @@ package com.tensiorr.budgetapp
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Icon
 import com.tensiorr.budgetapp.data.database.AppDatabase
+import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionTagCrossRef
 import com.tensiorr.budgetapp.ui.AddTransactionScreen
 import com.tensiorr.budgetapp.ui.TransactionListScreen
@@ -39,6 +41,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun BudgetAppNavigation(db: AppDatabase) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    var transactionToEdit by remember { mutableStateOf<Pair<Transaction, Long?>?>(null) }
 
     val dao = db.transactionDao()
     val tagDao = db.tagDao()
@@ -63,8 +66,39 @@ fun BudgetAppNavigation(db: AppDatabase) {
         }
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
-            when (selectedTab) {
-                0 -> {
+            when {
+                transactionToEdit != null -> {
+                    BackHandler {
+                        transactionToEdit = null
+                        selectedTab = 0
+                    }
+
+                    val scope = rememberCoroutineScope()
+                    AddTransactionScreen(
+                        categoryDao = categoryDao,
+                        tagDao = tagDao,
+                        transactionToEdit = transactionToEdit!!.first,
+                        existingTagId = transactionToEdit!!.second,
+                        onSave = { transaction, tagId ->
+                            scope.launch {
+                                dao.update(transaction)
+
+                                tagDao.deleteTransactionTagCrossRefsForTransaction(transaction.id)
+
+                                tagId?.let { id ->
+                                    tagDao.insertTransactionTagCrossRef(
+                                        TransactionTagCrossRef(transaction.id, id)
+                                    )
+                                }
+
+                                transactionToEdit = null
+                                selectedTab = 0
+                            }
+                        }
+                    )
+                }
+
+                selectedTab == 0 -> {
                     val scope = rememberCoroutineScope()
                     val transactionsWithTags = dao.getAllTransactionsWithTags()
                         .collectAsState(initial = emptyList())
@@ -79,10 +113,18 @@ fun BudgetAppNavigation(db: AppDatabase) {
                             scope.launch {
                                 dao.delete(transaction)
                             }
+                        },
+                        onEdit = { transaction, tagId ->
+                            transactionToEdit = Pair(transaction, tagId)
                         }
                     )
                 }
-                1 -> {
+
+                selectedTab == 1 -> {
+                    BackHandler {
+                        selectedTab = 0
+                    }
+
                     val scope = rememberCoroutineScope()
                     AddTransactionScreen(
                         categoryDao = categoryDao,
