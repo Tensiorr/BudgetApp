@@ -225,6 +225,7 @@ fun BudgetAppNavigation(
                     TransactionListScreen(
                         transactionsWithTags = transactionsWithTags.value,
                         categories = categories.value,
+                        tagDao = tagDao,
                         onDelete = { transaction ->
                             scope.launch {
                                 dao.delete(transaction)

@@ -197,85 +197,6 @@ fun DateRangeSelector(
 }
 
 /**
- * Dialog for selecting custom date range with start and end date pickers.
- */
-@Composable
-fun CustomDateRangeDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (LocalDate, LocalDate) -> Unit
-) {
-    var startDate by remember { mutableStateOf(LocalDate.now().minusMonths(1)) }
-    var endDate by remember { mutableStateOf(LocalDate.now()) }
-
-    val context = LocalContext.current
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Własny zakres dat") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    onClick = {
-                        val calendar = Calendar.getInstance()
-                        calendar.time = java.util.Date.from(
-                            startDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant()
-                        )
-
-                        DatePickerDialog(
-                            context,
-                            { _, year, month, day ->
-                                startDate = LocalDate.of(year, month + 1, day)
-                            },
-                            calendar.get(Calendar.YEAR),
-                            calendar.get(Calendar.MONTH),
-                            calendar.get(Calendar.DAY_OF_MONTH)
-                        ).show()
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Od: ${startDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))}")
-                }
-
-                OutlinedButton(
-                    onClick = {
-                        val calendar = Calendar.getInstance()
-                        calendar.time = java.util.Date.from(
-                            endDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant()
-                        )
-
-                        DatePickerDialog(
-                            context,
-                            { _, year, month, day ->
-                                endDate = LocalDate.of(year, month + 1, day)
-                            },
-                            calendar.get(Calendar.YEAR),
-                            calendar.get(Calendar.MONTH),
-                            calendar.get(Calendar.DAY_OF_MONTH)
-                        ).show()
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Do: ${endDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))}")
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(startDate, endDate) },
-                enabled = !startDate.isAfter(endDate)
-            ) {
-                Text("OK")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Anuluj")
-            }
-        }
-    )
-}
-
-/**
  * Displays summary cards showing balance, income, expense totals,
  * and category breakdowns for both expenses and income.
  */
@@ -432,10 +353,9 @@ fun CategoryBreakdown(
         .toList()
         .sortedByDescending { it.second }
 
-    // Get untagged transactions
     val untaggedTransactions = filteredTransactions
         .filter { it.transaction.type == transactionType }
-        .filter { it.tags.isEmpty() }  // ← Brak tagów = brak kategorii
+        .filter { it.tags.isEmpty() }
 
     val untaggedAmount = untaggedTransactions.sumOf { it.transaction.amountInCents }
 
@@ -448,7 +368,6 @@ fun CategoryBreakdown(
             modifier = Modifier.padding(top = 8.dp)
         )
 
-        // Regular categories
         transactionsByCategory.forEach { (categoryId, amount) ->
             key(categoryId, transactionType, filteredTransactions.size) {
                 CategoryItem(
@@ -462,7 +381,6 @@ fun CategoryBreakdown(
             }
         }
 
-        // Untagged section
         if (untaggedTransactions.isNotEmpty()) {
             key("untagged", transactionType, filteredTransactions.size) {
                 UntaggedCategoryItem(
@@ -536,7 +454,6 @@ fun CategoryItem(
             if (expanded) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                // Group transactions by tag
                 val tagGroups = transactions
                     .filter { it.transaction.type == transactionType }
                     .flatMap { transactionWithTags ->
@@ -546,7 +463,6 @@ fun CategoryItem(
                     }
                     .groupBy { it.first }
 
-                // Display tags
                 tagGroups.forEach { (tag, tagTransactions) ->
                     val tagAmount = tagTransactions.sumOf { it.second.transaction.amountInCents }
                     val isExpanded = expandedTags.contains(tag.id)
@@ -586,7 +502,6 @@ fun TagItemWithTransactions(
             .fillMaxWidth()
             .padding(start = 16.dp, top = 4.dp)
     ) {
-        // Tag header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -615,10 +530,10 @@ fun TagItemWithTransactions(
             )
         }
 
-        // Expanded: show transactions
+        
         if (isExpanded) {
             val sortedTransactions = transactions
-                .sortedByDescending { it.transaction.date }  // Najnowsze first
+                .sortedByDescending { it.transaction.date }  
 
             sortedTransactions.forEach { transactionWithTags ->
                 TransactionDetailItem(
@@ -719,7 +634,7 @@ fun TransactionDetailItem(
             )
         }
 
-        // Show comment if exists
+        
         transaction.comment?.let { comment ->
             Text(
                 text = "\"$comment\"",
