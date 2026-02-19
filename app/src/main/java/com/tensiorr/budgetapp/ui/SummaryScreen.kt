@@ -5,6 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -14,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.tensiorr.budgetapp.data.dao.CategoryDao
 import com.tensiorr.budgetapp.data.dao.TransactionDao
 import com.tensiorr.budgetapp.data.entity.Category
+import com.tensiorr.budgetapp.data.entity.Tag
 import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionType
 import com.tensiorr.budgetapp.data.entity.TransactionWithTags
@@ -428,7 +432,14 @@ fun CategoryBreakdown(
         .toList()
         .sortedByDescending { it.second }
 
-    if (transactionsByCategory.isEmpty()) return
+    // Get untagged transactions
+    val untaggedTransactions = filteredTransactions
+        .filter { it.transaction.type == transactionType }
+        .filter { it.tags.isEmpty() }  // ← Brak tagów = brak kategorii
+
+    val untaggedAmount = untaggedTransactions.sumOf { it.transaction.amountInCents }
+
+    if (transactionsByCategory.isEmpty() && untaggedTransactions.isEmpty()) return
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -437,6 +448,7 @@ fun CategoryBreakdown(
             modifier = Modifier.padding(top = 8.dp)
         )
 
+        // Regular categories
         transactionsByCategory.forEach { (categoryId, amount) ->
             key(categoryId, transactionType, filteredTransactions.size) {
                 CategoryItem(
@@ -449,9 +461,25 @@ fun CategoryBreakdown(
                 )
             }
         }
+
+        // Untagged section
+        if (untaggedTransactions.isNotEmpty()) {
+            key("untagged", transactionType, filteredTransactions.size) {
+                UntaggedCategoryItem(
+                    amount = untaggedAmount,
+                    totalAmount = totalAmount,
+                    transactions = untaggedTransactions,
+                    transactionType = transactionType
+                )
+            }
+        }
     }
 }
 
+/**
+ * Individual category card showing name, percentage, and total amount.
+ * Expandable to show breakdown by tags.
+ */
 /**
  * Individual category card showing name, percentage, and total amount.
  * Expandable to show breakdown by tags.
@@ -466,6 +494,7 @@ fun CategoryItem(
     transactionType: TransactionType
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var expandedTags by remember { mutableStateOf<Set<Long>>(emptySet()) }
 
     val categoryName = categories.firstOrNull { it.id == categoryId }?.name
         ?: "Nieznana kategoria"
@@ -507,36 +536,197 @@ fun CategoryItem(
             if (expanded) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                val tagAmounts = transactions
+                // Group transactions by tag
+                val tagGroups = transactions
                     .filter { it.transaction.type == transactionType }
                     .flatMap { transactionWithTags ->
                         transactionWithTags.tags
                             .filter { it.categoryId == categoryId }
-                            .map { tag ->
-                                tag to transactionWithTags.transaction.amountInCents
-                            }
+                            .map { tag -> tag to transactionWithTags }
                     }
                     .groupBy { it.first }
-                    .mapValues { (_, pairs) -> pairs.sumOf { it.second } }
 
-                tagAmounts.forEach { (tag, tagAmount) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, top = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "↳ ${tag.name}",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            text = formatAmount(tagAmount) + " PLN",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
+                // Display tags
+                tagGroups.forEach { (tag, tagTransactions) ->
+                    val tagAmount = tagTransactions.sumOf { it.second.transaction.amountInCents }
+                    val isExpanded = expandedTags.contains(tag.id)
+
+                    TagItemWithTransactions(
+                        tag = tag,
+                        amount = tagAmount,
+                        transactions = tagTransactions.map { it.second },
+                        isExpanded = isExpanded,
+                        onToggleExpand = {
+                            expandedTags = if (isExpanded) {
+                                expandedTags - tag.id
+                            } else {
+                                expandedTags + tag.id
+                            }
+                        }
+                    )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Tag item with expandable transaction list.
+ */
+@Composable
+fun TagItemWithTransactions(
+    tag: Tag,
+    amount: Int,
+    transactions: List<TransactionWithTags>,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, top = 4.dp)
+    ) {
+        // Tag header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggleExpand() }
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = "↳ ${tag.name}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            Text(
+                text = formatAmount(amount) + " PLN",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+
+        // Expanded: show transactions
+        if (isExpanded) {
+            val sortedTransactions = transactions
+                .sortedByDescending { it.transaction.date }  // Najnowsze first
+
+            sortedTransactions.forEach { transactionWithTags ->
+                TransactionDetailItem(
+                    transaction = transactionWithTags.transaction
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Category card for untagged transactions.
+ */
+@Composable
+fun UntaggedCategoryItem(
+    amount: Int,
+    totalAmount: Int,
+    transactions: List<TransactionWithTags>,
+    transactionType: TransactionType
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    val percentage = if (totalAmount > 0) {
+        (amount.toFloat() / totalAmount * 100).toInt()
+    } else 0
+
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .clickable { expanded = !expanded }
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Nieprzypisane",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "$percentage%",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    text = formatAmount(amount) + " PLN",
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+
+            if (expanded) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                val sortedTransactions = transactions
+                    .sortedByDescending { it.transaction.date }
+
+                sortedTransactions.forEach { transactionWithTags ->
+                    TransactionDetailItem(
+                        transaction = transactionWithTags.transaction
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Individual transaction detail (read-only).
+ */
+@Composable
+fun TransactionDetailItem(
+    transaction: Transaction
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 32.dp, top = 4.dp, bottom = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "• ${transaction.date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = formatAmount(transaction.amountInCents) + " PLN",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        // Show comment if exists
+        transaction.comment?.let { comment ->
+            Text(
+                text = "\"$comment\"",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 8.dp, top = 2.dp)
+            )
         }
     }
 }
