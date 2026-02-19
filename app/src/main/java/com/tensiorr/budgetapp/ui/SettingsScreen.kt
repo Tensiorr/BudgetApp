@@ -10,16 +10,22 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.tensiorr.budgetapp.BuildConfig
+import com.tensiorr.budgetapp.data.preferences.UserPreferences
 
 /**
  * Main settings screen with menu of configuration options.
  *
  * Available options:
  * - Manage categories and tags
+ * - Theme selection
  */
 @Composable
 fun SettingsScreen(
-    onNavigateToCategories: () -> Unit
+    onNavigateToCategories: () -> Unit,
+    onNavigateToTheme: () -> Unit,
+    onNavigateToStatistics: () -> Unit,
+    themeDisplayText: String
 ) {
     Column(
         modifier = Modifier
@@ -41,6 +47,38 @@ fun SettingsScreen(
                     title = "Zarządzaj kategoriami",
                     subtitle = "Edytuj i usuń kategorie oraz tagi",
                     onClick = onNavigateToCategories
+                )
+            }
+
+            item {
+                SettingsMenuItem(
+                    icon = Icons.Default.DarkMode,
+                    title = "Motyw",
+                    subtitle = themeDisplayText,
+                    onClick = onNavigateToTheme
+                )
+            }
+
+            item {
+                SettingsMenuItem(
+                    icon = Icons.Default.ShowChart,
+                    title = "Statystyki",
+                    subtitle = "Podsumowanie danych",
+                    onClick = onNavigateToStatistics
+                )
+            }
+
+            item {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            }
+
+            item {
+                SettingsMenuItem(
+                    icon = Icons.Default.Info,
+                    title = "O aplikacji",
+                    subtitle = "Wersja ${BuildConfig.VERSION_NAME}",
+                    onClick = { },
+                    enabled = false
                 )
             }
         }

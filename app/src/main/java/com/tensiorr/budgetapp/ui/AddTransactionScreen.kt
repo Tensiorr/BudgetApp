@@ -465,7 +465,7 @@ fun AddTransactionScreen(
             Dialog(onDismissRequest = { snackbarMessage = null }) {
                 Surface(
                     shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.inverseSurface,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Row(
@@ -475,11 +475,11 @@ fun AddTransactionScreen(
                     ) {
                         Text(
                             text = message,
-                            color = MaterialTheme.colorScheme.inverseOnSurface,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f)
                         )
                         TextButton(onClick = { snackbarMessage = null }) {
-                            Text("OK", color = MaterialTheme.colorScheme.inversePrimary)
+                            Text("OK", color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }

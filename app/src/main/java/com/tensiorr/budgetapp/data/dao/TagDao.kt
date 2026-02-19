@@ -38,6 +38,9 @@ interface TagDao {
     """)
     suspend fun getTransactionCountForTag(tagId: Long): Int
 
+    @Query("SELECT COUNT(*) FROM tags")
+    suspend fun getTagCount(): Int
+
     @Query("DELETE FROM transaction_tag_cross_ref WHERE transactionId = :transactionId")
     suspend fun deleteTransactionTagCrossRefsForTransaction(transactionId: Long)
 

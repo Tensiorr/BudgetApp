@@ -46,107 +46,138 @@ fun ManageCategoriesScreen(
         categories.filter { it.transactionType == TransactionType.INCOME }
     }
 
+    var showAddCategoryDialog by remember { mutableStateOf<TransactionType?>(null) }
     var showDeleteCategoryDialog by remember { mutableStateOf<Pair<Category, Int>?>(null) }
     var showEditCategoryDialog by remember { mutableStateOf<Category?>(null) }
+
     var showAddTagDialog by remember { mutableStateOf<Category?>(null) }
     var showEditTagDialog by remember { mutableStateOf<Tag?>(null) }
     var showDeleteTagDialog by remember { mutableStateOf<Pair<Tag, Int>?>(null) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            IconButton(onClick = onNavigateBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Wstecz")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onNavigateBack) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Wstecz")
+                }
+                Text(
+                    text = "Zarządzaj kategoriami",
+                    style = MaterialTheme.typography.headlineMedium
+                )
             }
-            Text(
-                text = "Zarządzaj kategoriami",
-                style = MaterialTheme.typography.headlineMedium
-            )
+
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item {
+                    Text(
+                        text = "KATEGORIE WYDATKÓW",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+
+                items(expenseCategories) { category ->
+                    CategorySettingsItem(
+                        category = category,
+                        tagDao = tagDao,
+                        onEditCategory = { showEditCategoryDialog = category },
+                        onDeleteCategory = {
+                            scope.launch {
+                                val count = categoryDao.getTransactionCountForCategory(category.id)
+                                showDeleteCategoryDialog = Pair(category, count)
+                            }
+                        },
+                        onAddTag = { showAddTagDialog = category },
+                        onEditTag = { showEditTagDialog = it },
+                        onDeleteTag = { tag ->
+                            scope.launch {
+                                val count = tagDao.getTransactionCountForTag(tag.id)
+                                showDeleteTagDialog = Pair(tag, count)
+                            }
+                        }
+                    )
+                }
+
+                item {
+                    Text(
+                        text = "KATEGORIE PRZYCHODÓW",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                    )
+                }
+
+                items(incomeCategories) { category ->
+                    CategorySettingsItem(
+                        category = category,
+                        tagDao = tagDao,
+                        onEditCategory = { showEditCategoryDialog = category },
+                        onDeleteCategory = {
+                            scope.launch {
+                                val count = categoryDao.getTransactionCountForCategory(category.id)
+                                showDeleteCategoryDialog = Pair(category, count)
+                            }
+                        },
+                        onAddTag = { showAddTagDialog = category },
+                        onEditTag = { showEditTagDialog = it },
+                        onDeleteTag = { tag ->
+                            scope.launch {
+                                val count = tagDao.getTransactionCountForTag(tag.id)
+                                showDeleteTagDialog = Pair(tag, count)
+                            }
+                        }
+                    )
+                }
+            }
         }
-
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        FloatingActionButton(
+            onClick = { showAddCategoryDialog = TransactionType.EXPENSE },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
         ) {
-            item {
-                Text(
-                    text = "KATEGORIE WYDATKÓW",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
-
-            items(expenseCategories) { category ->
-                CategorySettingsItem(
-                    category = category,
-                    tagDao = tagDao,
-                    onEditCategory = { showEditCategoryDialog = category },
-                    onDeleteCategory = {
-                        scope.launch {
-                            val count = categoryDao.getTransactionCountForCategory(category.id)
-                            showDeleteCategoryDialog = Pair(category, count)
-                        }
-                    },
-                    onAddTag = { showAddTagDialog = category },
-                    onEditTag = { showEditTagDialog = it },
-                    onDeleteTag = { tag ->
-                        scope.launch {
-                            val count = tagDao.getTransactionCountForTag(tag.id)
-                            showDeleteTagDialog = Pair(tag, count)
-                        }
-                    }
-                )
-            }
-
-            item {
-                Text(
-                    text = "KATEGORIE PRZYCHODÓW",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                )
-            }
-
-            items(incomeCategories) { category ->
-                CategorySettingsItem(
-                    category = category,
-                    tagDao = tagDao,
-                    onEditCategory = { showEditCategoryDialog = category },
-                    onDeleteCategory = {
-                        scope.launch {
-                            val count = categoryDao.getTransactionCountForCategory(category.id)
-                            showDeleteCategoryDialog = Pair(category, count)
-                        }
-                    },
-                    onAddTag = { showAddTagDialog = category },
-                    onEditTag = { showEditTagDialog = it },
-                    onDeleteTag = { tag ->
-                        scope.launch {
-                            val count = tagDao.getTransactionCountForTag(tag.id)
-                            showDeleteTagDialog = Pair(tag, count)
-                        }
-                    }
-                )
-            }
+            Icon(Icons.Default.Add, contentDescription = "Dodaj kategorię")
         }
     }
 
     showEditCategoryDialog?.let { category ->
-        EditCategoryDialog(
-            category = category,
-            onDismiss = { showEditCategoryDialog = null },
-            onConfirm = { newName ->
-                scope.launch {
-                    categoryDao.update(category.copy(name = newName.trim()))
-                    showEditCategoryDialog = null
+        if (category.id == 0L) {
+            AddCategoryDialog(
+                transactionType = category.transactionType,
+                categoryDao = categoryDao,
+                onDismiss = { showEditCategoryDialog = null },
+                onConfirm = { newName ->
+                    scope.launch {
+                        categoryDao.insert(
+                            Category(
+                                name = newName.trim(),
+                                transactionType = category.transactionType
+                            )
+                        )
+                        showEditCategoryDialog = null
+                    }
                 }
-            }
-        )
+            )
+        } else {
+            EditCategoryDialog(
+                category = category,
+                onDismiss = { showEditCategoryDialog = null },
+                onConfirm = { newName ->
+                    scope.launch {
+                        categoryDao.update(category.copy(name = newName.trim()))
+                        showEditCategoryDialog = null
+                    }
+                }
+            )
+        }
     }
 
     showDeleteCategoryDialog?.let { (category, transactionCount) ->
@@ -206,6 +237,19 @@ fun ManageCategoriesScreen(
                     tagDao.deleteTag(tag)
                     showDeleteTagDialog = null
                 }
+            }
+        )
+    }
+    showAddCategoryDialog?.let { preselectedType ->
+        AddCategoryTypeDialog(
+            onDismiss = { showAddCategoryDialog = null },
+            onTypeSelected = { selectedType ->
+                showAddCategoryDialog = null
+                showEditCategoryDialog = Category(
+                    id = 0,
+                    name = "",
+                    transactionType = selectedType
+                )
             }
         )
     }
@@ -541,6 +585,128 @@ fun DeleteTagDialog(
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text("Usuń", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Anuluj")
+            }
+        }
+    )
+}
+
+/**
+ * Dialog for selecting category type (Expense or Income) when adding new category.
+ */
+@Composable
+fun AddCategoryTypeDialog(
+    onDismiss: () -> Unit,
+    onTypeSelected: (TransactionType) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Wybierz typ kategorii") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onTypeSelected(TransactionType.EXPENSE) }
+                ) {
+                    Text(
+                        text = "Wydatek",
+                        modifier = Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onTypeSelected(TransactionType.INCOME) }
+                ) {
+                    Text(
+                        text = "Przychód",
+                        modifier = Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Anuluj")
+            }
+        }
+    )
+}
+
+/**
+ * Dialog for adding new category with duplicate checking.
+ */
+@Composable
+fun AddCategoryDialog(
+    transactionType: TransactionType,
+    categoryDao: CategoryDao,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var categoryName by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                if (transactionType == TransactionType.EXPENSE) {
+                    "Nowa kategoria wydatków"
+                } else {
+                    "Nowa kategoria przychodów"
+                }
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = categoryName,
+                    onValueChange = {
+                        categoryName = it
+                        errorMessage = null
+                    },
+                    label = { Text("Nazwa kategorii") },
+                    singleLine = true,
+                    isError = errorMessage != null,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                errorMessage?.let {
+                    Text(
+                        text = it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    scope.launch {
+                        val existing = categoryDao.getCategoryByNameAndType(
+                            categoryName.trim(),
+                            transactionType
+                        )
+                        if (existing != null) {
+                            errorMessage = "Kategoria o tej nazwie już istnieje"
+                        } else {
+                            onConfirm(categoryName)
+                        }
+                    }
+                },
+                enabled = categoryName.isNotBlank()
+            ) {
+                Text("Dodaj")
             }
         },
         dismissButton = {

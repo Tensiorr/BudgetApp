@@ -4,6 +4,7 @@ import androidx.room.*
 import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionWithTags
 import kotlinx.coroutines.flow.Flow
+import java.time.LocalDate
 import androidx.room.Transaction as RoomTransaction
 
 @Dao
@@ -21,6 +22,12 @@ interface TransactionDao {
     @RoomTransaction
     @Query("SELECT * FROM transactions ORDER BY date DESC, id DESC")
     fun getAllTransactionsWithTags(): Flow<List<TransactionWithTags>>
+
+    @Query("SELECT COUNT(*) FROM transactions")
+    suspend fun getTransactionCount(): Int
+
+    @Query("SELECT MIN(date) FROM transactions")
+    suspend fun getFirstTransactionDate(): LocalDate?
 
     @Update
     suspend fun update(transaction: Transaction)

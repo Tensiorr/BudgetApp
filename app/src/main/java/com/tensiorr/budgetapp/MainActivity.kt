@@ -19,36 +19,76 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Icon
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.lifecycleScope
 import com.tensiorr.budgetapp.data.database.AppDatabase
 import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionTagCrossRef
+import com.tensiorr.budgetapp.data.preferences.UserPreferences
 import com.tensiorr.budgetapp.ui.AddTransactionScreen
 import com.tensiorr.budgetapp.ui.ManageCategoriesScreen
 import com.tensiorr.budgetapp.ui.SettingsScreen
+import com.tensiorr.budgetapp.ui.StatisticsScreen
 import com.tensiorr.budgetapp.ui.SummaryScreen
+import com.tensiorr.budgetapp.ui.ThemeSelectionScreen
 import com.tensiorr.budgetapp.ui.TransactionListScreen
 import com.tensiorr.budgetapp.ui.theme.BudgetAppTheme
+import com.tensiorr.budgetapp.ui.theme.ThemeMode
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val db = AppDatabase.getDatabase(this)
+        val preferences = UserPreferences(this)
+
+        var isReady = false
+        var initialThemeMode = ThemeMode.SYSTEM
+
+        splashScreen.setKeepOnScreenCondition { !isReady }
+
+        lifecycleScope.launch {
+            preferences.themeModeFlow.first().let { mode ->
+                initialThemeMode = try {
+                    ThemeMode.valueOf(mode)
+                } catch (e: Exception) {
+                    ThemeMode.SYSTEM
+                }
+            }
+            db.transactionDao().getAllTransactionsWithTags().first()
+            db.categoryDao().getAllCategories().first()
+
+            isReady = true
+        }
+
         setContent {
-            BudgetAppTheme {
-                BudgetAppNavigation(db = db)
+            val themeMode by preferences.themeModeEnumFlow
+                .collectAsState(initial = ThemeMode.SYSTEM)
+
+            BudgetAppTheme(themeMode = themeMode) {
+                BudgetAppNavigation(
+                    db = db,
+                    preferences = preferences
+                )
             }
         }
     }
 }
 
 @Composable
-fun BudgetAppNavigation(db: AppDatabase) {
+fun BudgetAppNavigation(
+    db: AppDatabase,
+    preferences: UserPreferences
+) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var transactionToEdit by remember { mutableStateOf<Pair<Transaction, Long?>?>(null) }
     var showManageCategories by remember { mutableStateOf(false) }
+    var showThemeSelection by remember { mutableStateOf(false) }
+    var showStatistics by remember { mutableStateOf(false) }
 
     val dao = db.transactionDao()
     val tagDao = db.tagDao()
@@ -61,9 +101,21 @@ fun BudgetAppNavigation(db: AppDatabase) {
     val categories = categoryDao.getAllCategories()
         .collectAsState(initial = emptyList())
 
+    val currentThemeMode by preferences.themeModeFlow
+        .collectAsState(initial = "SYSTEM")
+
+    val themeDisplayText = when (currentThemeMode) {
+        "LIGHT" -> "Jasny"
+        "DARK" -> "Ciemny"
+        "SYSTEM" -> "Systemowy"
+        else -> "Systemowy"
+    }
+
     fun navigateToTab(tab: Int) {
         transactionToEdit = null
         showManageCategories = false
+        showThemeSelection = false
+        showStatistics = false
         selectedTab = tab
     }
 
@@ -114,6 +166,32 @@ fun BudgetAppNavigation(db: AppDatabase) {
                         }
                     )
                 }
+                showThemeSelection -> {
+                    BackHandler {
+                        showThemeSelection = false
+                        selectedTab = 3
+                    }
+                    ThemeSelectionScreen(
+                        preferences = preferences,
+                        onNavigateBack = {
+                            showThemeSelection = false
+                        }
+                    )
+                }
+                showStatistics -> {
+                    BackHandler {
+                        showStatistics = false
+                        selectedTab = 3
+                    }
+                    StatisticsScreen(
+                        transactionDao = dao,
+                        categoryDao = categoryDao,
+                        tagDao = tagDao,
+                        onNavigateBack = {
+                            showStatistics = false
+                        }
+                    )
+                }
                 transactionToEdit != null -> {
                     BackHandler {
                         transactionToEdit = null
@@ -159,7 +237,7 @@ fun BudgetAppNavigation(db: AppDatabase) {
                 }
                 selectedTab == 1 -> {
                     BackHandler {
-                        selectedTab = 0
+                        navigateToTab(0)
                     }
                     SummaryScreen(
                         transactionDao = dao,
@@ -170,7 +248,7 @@ fun BudgetAppNavigation(db: AppDatabase) {
                 }
                 selectedTab == 2 -> {
                     BackHandler {
-                        selectedTab = 0
+                        navigateToTab(0)
                     }
                     val scope = rememberCoroutineScope()
                     AddTransactionScreen(
@@ -184,19 +262,26 @@ fun BudgetAppNavigation(db: AppDatabase) {
                                         TransactionTagCrossRef(transactionId, id)
                                     )
                                 }
-                                selectedTab = 0
+                                navigateToTab(0)
                             }
                         }
                     )
                 }
                 selectedTab == 3 -> {
                     BackHandler {
-                        selectedTab = 0
+                        navigateToTab(0)
                     }
                     SettingsScreen(
                         onNavigateToCategories = {
                             showManageCategories = true
-                        }
+                        },
+                        onNavigateToTheme = {
+                            showThemeSelection = true
+                        },
+                        onNavigateToStatistics = {
+                            showStatistics = true
+                        },
+                        themeDisplayText = themeDisplayText
                     )
                 }
             }

@@ -33,6 +33,9 @@ interface CategoryDao {
     """)
     suspend fun getTransactionCountForCategory(categoryId: Long): Int
 
+    @Query("SELECT COUNT(*) FROM categories")
+    suspend fun getCategoryCount(): Int
+
     @Delete
     suspend fun delete(category: Category)
 }
