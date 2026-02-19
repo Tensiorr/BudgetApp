@@ -26,6 +26,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.text.style.TextAlign
+import java.time.YearMonth
+import java.util.Locale
 
 /**
  * Screen displaying list of transactions with balance summary.
@@ -45,6 +47,12 @@ fun TransactionListScreen(
 ) {
     val balance = CalculateBalance(transactionsWithTags.map { it.transaction })
     var transactionToDelete by remember { mutableStateOf<Transaction?>(null) }
+
+    val groupedTransactions = remember(transactionsWithTags) {
+        transactionsWithTags.groupBy {
+            YearMonth.from(it.transaction.date)
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Card(
@@ -79,25 +87,45 @@ fun TransactionListScreen(
                         )
                     }
                 }
-            }
-            items(
-                items = transactionsWithTags,
-                key = { it.transaction.id }
-            ) { transactionWithTags ->
-                SwipeToDeleteItem(
-                    onDelete = { transactionToDelete = transactionWithTags.transaction }
-                ) {
-                    TransactionItem(
-                        transaction = transactionWithTags.transaction,
-                        tags = transactionWithTags.tags,
-                        categories = categories,
-                        onClick = {
-                            val tagId = transactionWithTags.tags.firstOrNull()?.id
-                            onEdit(transactionWithTags.transaction, tagId)
-                        }
-                    )
+            } else {
+                val groupedTransactions = transactionsWithTags.groupBy {
+                    YearMonth.from(it.transaction.date)
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+
+                groupedTransactions.forEach { (yearMonth, transactions) ->
+                    item(key = "header_$yearMonth") {
+                        Text(
+                            text = yearMonth.format(
+                                DateTimeFormatter.ofPattern("LLLL yyyy", Locale("pl", "PL"))
+                            ).replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp, horizontal = 8.dp),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    items(
+                        items = transactions,
+                        key = { it.transaction.id }
+                    ) { transactionWithTags ->
+                        SwipeToDeleteItem(
+                            onDelete = { transactionToDelete = transactionWithTags.transaction }
+                        ) {
+                            TransactionItem(
+                                transaction = transactionWithTags.transaction,
+                                tags = transactionWithTags.tags,
+                                categories = categories,
+                                onClick = {
+                                    val tagId = transactionWithTags.tags.firstOrNull()?.id
+                                    onEdit(transactionWithTags.transaction, tagId)
+                                }
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
             }
         }
     }

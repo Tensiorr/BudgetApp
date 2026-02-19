@@ -26,12 +26,27 @@ interface TagDao {
     @Query("SELECT * FROM tags WHERE id = :tagId LIMIT 1")
     suspend fun getTagById(tagId: Long): Tag?
 
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertTransactionTagCrossRef(crossRef: TransactionTagCrossRef)
-
     @Query("SELECT * FROM tags WHERE id IN (SELECT tagId FROM transaction_tag_cross_ref WHERE transactionId = :transactionId)")
     suspend fun getTagsForTransaction(transactionId: Long): List<Tag>
 
+    @Query("""
+    SELECT COUNT(*) FROM transactions 
+    WHERE id IN (
+        SELECT transactionId FROM transaction_tag_cross_ref 
+        WHERE tagId = :tagId
+    )
+    """)
+    suspend fun getTransactionCountForTag(tagId: Long): Int
+
     @Query("DELETE FROM transaction_tag_cross_ref WHERE transactionId = :transactionId")
     suspend fun deleteTransactionTagCrossRefsForTransaction(transactionId: Long)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertTransactionTagCrossRef(crossRef: TransactionTagCrossRef)
+
+    @Update
+    suspend fun updateTag(tag: Tag)
+
+    @Delete
+    suspend fun deleteTag(tag: Tag)
 }

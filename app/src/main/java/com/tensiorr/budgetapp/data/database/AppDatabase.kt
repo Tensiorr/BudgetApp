@@ -5,6 +5,8 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.tensiorr.budgetapp.data.Converters
 import com.tensiorr.budgetapp.data.dao.CategoryDao
 import com.tensiorr.budgetapp.data.dao.TagDao
@@ -21,7 +23,7 @@ import com.tensiorr.budgetapp.data.entity.Category
         TransactionTagCrossRef::class,
         Category::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -42,7 +44,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "budget_database"
                 )
-                    .fallbackToDestructiveMigration()
+                    .addMigrations(DatabaseMigrations.MIGRATION_3_5)
                     .build()
                 INSTANCE = instance
                 instance

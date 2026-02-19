@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Text
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -22,6 +23,8 @@ import com.tensiorr.budgetapp.data.database.AppDatabase
 import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionTagCrossRef
 import com.tensiorr.budgetapp.ui.AddTransactionScreen
+import com.tensiorr.budgetapp.ui.ManageCategoriesScreen
+import com.tensiorr.budgetapp.ui.SettingsScreen
 import com.tensiorr.budgetapp.ui.SummaryScreen
 import com.tensiorr.budgetapp.ui.TransactionListScreen
 import com.tensiorr.budgetapp.ui.theme.BudgetAppTheme
@@ -45,6 +48,7 @@ class MainActivity : ComponentActivity() {
 fun BudgetAppNavigation(db: AppDatabase) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var transactionToEdit by remember { mutableStateOf<Pair<Transaction, Long?>?>(null) }
+    var showManageCategories by remember { mutableStateOf(false) }
 
     val dao = db.transactionDao()
     val tagDao = db.tagDao()
@@ -57,6 +61,12 @@ fun BudgetAppNavigation(db: AppDatabase) {
     val categories = categoryDao.getAllCategories()
         .collectAsState(initial = emptyList())
 
+    fun navigateToTab(tab: Int) {
+        transactionToEdit = null
+        showManageCategories = false
+        selectedTab = tab
+    }
+
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -64,25 +74,46 @@ fun BudgetAppNavigation(db: AppDatabase) {
                     icon = { Icon(Icons.Default.List, contentDescription = "Lista") },
                     label = { Text("Lista") },
                     selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 }
+                    onClick = { navigateToTab(0) }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.BarChart, contentDescription = "Zestawienia") },
                     label = { Text("Zestawienia") },
                     selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 }
+                    onClick = { navigateToTab(1) }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.Add, contentDescription = "Dodaj") },
                     label = { Text("Dodaj") },
                     selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 }
+                    onClick = { navigateToTab(2) }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Settings, contentDescription = "Ustawienia") },
+                    label = { Text("Ustawienia") },
+                    selected = selectedTab == 3,
+                    onClick = { navigateToTab(3) }
                 )
             }
         }
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
             when {
+                showManageCategories -> {
+                    BackHandler {
+                        showManageCategories = false
+                        selectedTab = 3
+                    }
+                    ManageCategoriesScreen(
+                        categoryDao = categoryDao,
+                        tagDao = tagDao,
+                        transactionDao = dao,
+                        categories = categories.value,
+                        onNavigateBack = {
+                            showManageCategories = false
+                        }
+                    )
+                }
                 transactionToEdit != null -> {
                     BackHandler {
                         transactionToEdit = null
@@ -158,7 +189,16 @@ fun BudgetAppNavigation(db: AppDatabase) {
                         }
                     )
                 }
-
+                selectedTab == 3 -> {
+                    BackHandler {
+                        selectedTab = 0
+                    }
+                    SettingsScreen(
+                        onNavigateToCategories = {
+                            showManageCategories = true
+                        }
+                    )
+                }
             }
         }
     }

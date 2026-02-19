@@ -19,6 +19,20 @@ interface CategoryDao {
     @Query("SELECT * FROM categories ORDER BY name ASC")
     fun getAllCategories(): Flow<List<Category>>
 
+    @Update
+    suspend fun update(category: Category)
+
+    @Query("""
+    SELECT COUNT(*) FROM transactions 
+    WHERE id IN (
+        SELECT transactionId FROM transaction_tag_cross_ref 
+        WHERE tagId IN (
+            SELECT id FROM tags WHERE categoryId = :categoryId
+        )
+    )
+    """)
+    suspend fun getTransactionCountForCategory(categoryId: Long): Int
+
     @Delete
     suspend fun delete(category: Category)
 }
