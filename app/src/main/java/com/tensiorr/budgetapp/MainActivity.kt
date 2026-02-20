@@ -26,6 +26,8 @@ import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionTagCrossRef
 import com.tensiorr.budgetapp.data.preferences.UserPreferences
 import com.tensiorr.budgetapp.ui.AddTransactionScreen
+import com.tensiorr.budgetapp.ui.DateFormatOption
+import com.tensiorr.budgetapp.ui.DateFormatSelectionScreen
 import com.tensiorr.budgetapp.ui.ManageCategoriesScreen
 import com.tensiorr.budgetapp.ui.SettingsScreen
 import com.tensiorr.budgetapp.ui.StatisticsScreen
@@ -89,6 +91,7 @@ fun BudgetAppNavigation(
     var showManageCategories by remember { mutableStateOf(false) }
     var showThemeSelection by remember { mutableStateOf(false) }
     var showStatistics by remember { mutableStateOf(false) }
+    var showDateFormatSelection by remember { mutableStateOf(false) }
 
     val dao = db.transactionDao()
     val tagDao = db.tagDao()
@@ -103,6 +106,9 @@ fun BudgetAppNavigation(
 
     val currentThemeMode by preferences.themeModeFlow
         .collectAsState(initial = "SYSTEM")
+    val currentDateFormatString by preferences.dateFormatFlow
+        .collectAsState(initial = "DD.MM.YYYY")
+    val dateFormat = DateFormatOption.fromPattern(currentDateFormatString)
 
     val themeDisplayText = when (currentThemeMode) {
         "LIGHT" -> "Jasny"
@@ -116,6 +122,7 @@ fun BudgetAppNavigation(
         showManageCategories = false
         showThemeSelection = false
         showStatistics = false
+        showDateFormatSelection = false
         selectedTab = tab
     }
 
@@ -151,6 +158,18 @@ fun BudgetAppNavigation(
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
             when {
+                showDateFormatSelection -> {
+                    BackHandler {
+                        showDateFormatSelection = false
+                        selectedTab = 3
+                    }
+                    DateFormatSelectionScreen(
+                        preferences = preferences,
+                        onNavigateBack = {
+                            showDateFormatSelection = false
+                        }
+                    )
+                }
                 showManageCategories -> {
                     BackHandler {
                         showManageCategories = false
@@ -203,18 +222,16 @@ fun BudgetAppNavigation(
                         tagDao = tagDao,
                         transactionToEdit = transactionToEdit!!.first,
                         existingTagId = transactionToEdit!!.second,
+                        dateFormat = dateFormat,
                         onSave = { transaction, tagId ->
                             scope.launch {
                                 dao.update(transaction)
-
                                 tagDao.deleteTransactionTagCrossRefsForTransaction(transaction.id)
-
                                 tagId?.let { id ->
                                     tagDao.insertTransactionTagCrossRef(
                                         TransactionTagCrossRef(transaction.id, id)
                                     )
                                 }
-
                                 transactionToEdit = null
                                 selectedTab = 0
                             }
@@ -226,6 +243,7 @@ fun BudgetAppNavigation(
                         transactionsWithTags = transactionsWithTags.value,
                         categories = categories.value,
                         tagDao = tagDao,
+                        dateFormat = dateFormat,
                         onDelete = { transaction ->
                             scope.launch {
                                 dao.delete(transaction)
@@ -241,10 +259,9 @@ fun BudgetAppNavigation(
                         navigateToTab(0)
                     }
                     SummaryScreen(
-                        transactionDao = dao,
-                        categoryDao = categoryDao,
                         transactions = transactionsWithTags.value,
-                        categories = categories.value
+                        categories = categories.value,
+                        dateFormat = dateFormat
                     )
                 }
                 selectedTab == 2 -> {
@@ -255,6 +272,7 @@ fun BudgetAppNavigation(
                     AddTransactionScreen(
                         categoryDao = categoryDao,
                         tagDao = tagDao,
+                        dateFormat = dateFormat,
                         onSave = { transaction, tagId ->
                             scope.launch {
                                 val transactionId = dao.insert(transaction)
@@ -282,7 +300,11 @@ fun BudgetAppNavigation(
                         onNavigateToStatistics = {
                             showStatistics = true
                         },
-                        themeDisplayText = themeDisplayText
+                        onNavigateToDateFormat = {
+                            showDateFormatSelection = true
+                        },
+                        themeDisplayText = themeDisplayText,
+                        dateFormatDisplayText = currentDateFormatString
                     )
                 }
             }

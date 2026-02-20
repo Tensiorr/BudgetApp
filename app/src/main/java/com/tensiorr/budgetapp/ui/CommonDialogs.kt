@@ -5,25 +5,23 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
  * Dialog for selecting custom date range with start and end date pickers.
- * Uses Material3 DatePicker for better UX and dark mode support.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomDateRangeDialog(
     onDismiss: () -> Unit,
-    onConfirm: (LocalDate, LocalDate) -> Unit
+    onConfirm: (LocalDate, LocalDate) -> Unit,
+    dateFormat: DateFormatOption = DateFormatOption.DD_MM_YYYY
 ) {
     var startDate by remember { mutableStateOf(LocalDate.now().minusMonths(1)) }
     var endDate by remember { mutableStateOf(LocalDate.now()) }
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
+
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -34,14 +32,14 @@ fun CustomDateRangeDialog(
                     onClick = { showStartDatePicker = true },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Od: ${startDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))}")
+                    Text("Od: ${dateFormat.format(startDate)}")
                 }
 
                 OutlinedButton(
                     onClick = { showEndDatePicker = true },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Do: ${endDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))}")
+                    Text("Do: ${dateFormat.format(endDate)}")
                 }
             }
         },
@@ -61,75 +59,26 @@ fun CustomDateRangeDialog(
     )
 
     if (showStartDatePicker) {
-        Material3DatePickerDialog(
+        CustomDatePickerDialog(
             initialDate = startDate,
             onDateSelected = { selectedDate ->
                 startDate = selectedDate
                 showStartDatePicker = false
             },
-            onDismiss = { showStartDatePicker = false }
+            onDismiss = { showStartDatePicker = false },
+            dateFormat = dateFormat
         )
     }
 
     if (showEndDatePicker) {
-        Material3DatePickerDialog(
+        CustomDatePickerDialog(
             initialDate = endDate,
             onDateSelected = { selectedDate ->
                 endDate = selectedDate
                 showEndDatePicker = false
             },
-            onDismiss = { showEndDatePicker = false }
-        )
-    }
-}
-
-/**
- * Material3 DatePicker dialog with proper dark mode support.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun Material3DatePickerDialog(
-    initialDate: LocalDate,
-    onDateSelected: (LocalDate) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = initialDate
-            .atStartOfDay(ZoneId.systemDefault())
-            .toInstant()
-            .toEpochMilli()
-    )
-
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        val selectedDate = Instant.ofEpochMilli(millis)
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDate()
-                        onDateSelected(selectedDate)
-                    }
-                }
-            ) {
-                Text("OK")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Anuluj")
-            }
-        }
-    ) {
-        DatePicker(
-            state = datePickerState,
-            title = {
-                Text(
-                    text = "Wybierz datę",
-                    modifier = Modifier.padding(start = 24.dp, top = 16.dp)
-                )
-            }
+            onDismiss = { showEndDatePicker = false },
+            dateFormat = dateFormat
         )
     }
 }

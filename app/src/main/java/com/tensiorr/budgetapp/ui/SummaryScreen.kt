@@ -11,14 +11,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.tensiorr.budgetapp.data.dao.CategoryDao
-import com.tensiorr.budgetapp.data.dao.TransactionDao
 import com.tensiorr.budgetapp.data.entity.Category
 import com.tensiorr.budgetapp.data.entity.Tag
 import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionType
 import com.tensiorr.budgetapp.data.entity.TransactionWithTags
+import com.tensiorr.budgetapp.data.preferences.UserPreferences
 import com.tensiorr.budgetapp.ui.theme.Green
 import com.tensiorr.budgetapp.ui.theme.Red
 import java.time.LocalDate
@@ -26,48 +26,26 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/**
- * Extension function for capitalizing first character of a string.
- */
 fun String.capitalize(): String = replaceFirstChar {
     if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
 }
 
-/**
- * Sealed class representing date range selection types.
- * Can be either a specific month or a custom date range.
- */
 sealed class DateRangeType {
     data class Month(val yearMonth: YearMonth) : DateRangeType()
     data class Custom(val startDate: LocalDate, val endDate: LocalDate) : DateRangeType()
 }
 
-/**
- * Gets list of available months from transactions, sorted newest first.
- * Returns current month if no transactions exist.
- */
 fun getAvailableMonths(transactions: List<Transaction>): List<YearMonth> {
     if (transactions.isEmpty()) return listOf(YearMonth.now())
-
     val months = transactions.map { YearMonth.from(it.date) }.distinct().sorted()
     return if (months.isEmpty()) listOf(YearMonth.now()) else months.reversed()
 }
 
-/**
- * Screen displaying financial summaries with date range filtering.
- *
- * Features:
- * - Monthly or custom date range selection
- * - Balance, income, and expense summary cards
- * - Category breakdown for expenses and income with percentages
- * - Expandable categories showing individual tags
- */
 @Composable
 fun SummaryScreen(
-    transactionDao: TransactionDao,
-    categoryDao: CategoryDao,
     transactions: List<TransactionWithTags>,
-    categories: List<Category>
+    categories: List<Category>,
+    dateFormat: DateFormatOption
 ) {
     var selectedRangeType by remember { mutableStateOf<DateRangeType>(
         DateRangeType.Month(YearMonth.now())
@@ -81,12 +59,8 @@ fun SummaryScreen(
         transactions.filter { transactionWithTags ->
             val date = transactionWithTags.transaction.date
             when (val range = selectedRangeType) {
-                is DateRangeType.Month -> {
-                    YearMonth.from(date) == range.yearMonth
-                }
-                is DateRangeType.Custom -> {
-                    !date.isBefore(range.startDate) && !date.isAfter(range.endDate)
-                }
+                is DateRangeType.Month -> YearMonth.from(date) == range.yearMonth
+                is DateRangeType.Custom -> !date.isBefore(range.startDate) && !date.isAfter(range.endDate)
             }
         }
     }
@@ -106,25 +80,25 @@ fun SummaryScreen(
         DateRangeSelector(
             selectedRange = selectedRangeType,
             availableMonths = availableMonths,
-            onRangeChange = { selectedRangeType = it }
+            onRangeChange = { selectedRangeType = it },
+            dateFormat = dateFormat
         )
 
         SummaryCards(
             filteredTransactions = filteredTransactions,
-            categories = categories
+            categories = categories,
+            dateFormat = dateFormat
         )
     }
 }
 
-/**
- * Dropdown selector for choosing date range (monthly or custom).
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DateRangeSelector(
     selectedRange: DateRangeType,
     availableMonths: List<YearMonth>,
-    onRangeChange: (DateRangeType) -> Unit
+    onRangeChange: (DateRangeType) -> Unit,
+    dateFormat: DateFormatOption = DateFormatOption.DD_MM_YYYY
 ) {
     var expanded by remember { mutableStateOf(false) }
     var showCustomDialog by remember { mutableStateOf(false) }
@@ -135,8 +109,7 @@ fun DateRangeSelector(
             selectedRange.yearMonth.format(formatter).capitalize()
         }
         is DateRangeType.Custom -> {
-            val formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
-            "${selectedRange.startDate.format(formatter)} - ${selectedRange.endDate.format(formatter)}"
+            "${dateFormat.format(selectedRange.startDate)} - ${dateFormat.format(selectedRange.endDate)}"
         }
     }
 
@@ -188,19 +161,17 @@ fun DateRangeSelector(
             onConfirm = { startDate, endDate ->
                 onRangeChange(DateRangeType.Custom(startDate, endDate))
                 showCustomDialog = false
-            }
+            },
+            dateFormat = dateFormat
         )
     }
 }
 
-/**
- * Displays summary cards showing balance, income, expense totals,
- * and category breakdowns for both expenses and income.
- */
 @Composable
 fun SummaryCards(
     filteredTransactions: List<TransactionWithTags>,
-    categories: List<Category>
+    categories: List<Category>,
+    dateFormat: DateFormatOption
 ) {
     val income = filteredTransactions
         .filter { it.transaction.type == TransactionType.INCOME }
@@ -227,10 +198,7 @@ fun SummaryCards(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    text = "SALDO",
-                    style = MaterialTheme.typography.labelMedium
-                )
+                Text(text = "SALDO", style = MaterialTheme.typography.labelMedium)
                 Text(
                     text = formatAmount(balance) + " PLN",
                     style = MaterialTheme.typography.headlineLarge
@@ -252,10 +220,7 @@ fun SummaryCards(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(
-                        text = "PRZYCHODY",
-                        style = MaterialTheme.typography.labelSmall
-                    )
+                    Text(text = "PRZYCHODY", style = MaterialTheme.typography.labelSmall)
                     Text(
                         text = formatAmount(income) + " PLN",
                         style = MaterialTheme.typography.titleLarge,
@@ -274,10 +239,7 @@ fun SummaryCards(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(
-                        text = "WYDATKI",
-                        style = MaterialTheme.typography.labelSmall
-                    )
+                    Text(text = "WYDATKI", style = MaterialTheme.typography.labelSmall)
                     Text(
                         text = formatAmount(expenses) + " PLN",
                         style = MaterialTheme.typography.titleLarge,
@@ -294,7 +256,8 @@ fun SummaryCards(
                     totalAmount = expenses,
                     categories = categories,
                     transactionType = TransactionType.EXPENSE,
-                    title = "KATEGORIE WYDATKÓW"
+                    title = "KATEGORIE WYDATKÓW",
+                    dateFormat = dateFormat
                 )
             }
 
@@ -304,7 +267,8 @@ fun SummaryCards(
                     totalAmount = income,
                     categories = categories,
                     transactionType = TransactionType.INCOME,
-                    title = "KATEGORIE PRZYCHODÓW"
+                    title = "KATEGORIE PRZYCHODÓW",
+                    dateFormat = dateFormat
                 )
             }
         } else {
@@ -317,24 +281,18 @@ fun SummaryCards(
     }
 }
 
-/**
- * Formats amount in cents to PLN string with comma decimal separator.
- * Example: 15000 cents -> "150,00"
- */
 fun formatAmount(cents: Int): String {
     return String.format("%,.2f", cents / 100.0).replace(',', ' ').replace('.', ',')
 }
 
-/**
- * Displays category breakdown list with percentages and expandable tag details.
- */
 @Composable
 fun CategoryBreakdown(
     filteredTransactions: List<TransactionWithTags>,
     totalAmount: Int,
     categories: List<Category>,
     transactionType: TransactionType,
-    title: String
+    title: String,
+    dateFormat: DateFormatOption
 ) {
     val transactionsByCategory = filteredTransactions
         .filter { it.transaction.type == transactionType }
@@ -344,9 +302,7 @@ fun CategoryBreakdown(
             }
         }
         .groupBy { it.first.categoryId }
-        .mapValues { (_, pairs) ->
-            pairs.sumOf { it.second }
-        }
+        .mapValues { (_, pairs) -> pairs.sumOf { it.second } }
         .toList()
         .sortedByDescending { it.second }
 
@@ -373,7 +329,8 @@ fun CategoryBreakdown(
                     totalAmount = totalAmount,
                     transactions = filteredTransactions,
                     categories = categories,
-                    transactionType = transactionType
+                    transactionType = transactionType,
+                    dateFormat = dateFormat
                 )
             }
         }
@@ -384,21 +341,14 @@ fun CategoryBreakdown(
                     amount = untaggedAmount,
                     totalAmount = totalAmount,
                     transactions = untaggedTransactions,
-                    transactionType = transactionType
+                    transactionType = transactionType,
+                    dateFormat = dateFormat
                 )
             }
         }
     }
 }
 
-/**
- * Individual category card showing name, percentage, and total amount.
- * Expandable to show breakdown by tags.
- */
-/**
- * Individual category card showing name, percentage, and total amount.
- * Expandable to show breakdown by tags.
- */
 @Composable
 fun CategoryItem(
     categoryId: Long,
@@ -406,7 +356,8 @@ fun CategoryItem(
     totalAmount: Int,
     transactions: List<TransactionWithTags>,
     categories: List<Category>,
-    transactionType: TransactionType
+    transactionType: TransactionType,
+    dateFormat: DateFormatOption
 ) {
     var expanded by remember { mutableStateOf(false) }
     var expandedTags by remember { mutableStateOf<Set<Long>>(emptySet()) }
@@ -418,9 +369,7 @@ fun CategoryItem(
         (amount.toFloat() / totalAmount * 100).toInt()
     } else 0
 
-    Card(
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .clickable { expanded = !expanded }
@@ -432,10 +381,7 @@ fun CategoryItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = categoryName,
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    Text(text = categoryName, style = MaterialTheme.typography.titleMedium)
                     Text(
                         text = "$percentage%",
                         style = MaterialTheme.typography.bodySmall,
@@ -475,7 +421,8 @@ fun CategoryItem(
                             } else {
                                 expandedTags + tag.id
                             }
-                        }
+                        },
+                        dateFormat = dateFormat
                     )
                 }
             }
@@ -483,16 +430,14 @@ fun CategoryItem(
     }
 }
 
-/**
- * Tag item with expandable transaction list.
- */
 @Composable
 fun TagItemWithTransactions(
     tag: Tag,
     amount: Int,
     transactions: List<TransactionWithTags>,
     isExpanded: Boolean,
-    onToggleExpand: () -> Unit
+    onToggleExpand: () -> Unit,
+    dateFormat: DateFormatOption
 ) {
     Column(
         modifier = Modifier
@@ -516,10 +461,7 @@ fun TagItemWithTransactions(
                     contentDescription = null,
                     modifier = Modifier.size(16.dp)
                 )
-                Text(
-                    text = "↳ ${tag.name}",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Text(text = "↳ ${tag.name}", style = MaterialTheme.typography.bodyMedium)
             }
             Text(
                 text = formatAmount(amount) + " PLN",
@@ -527,29 +469,25 @@ fun TagItemWithTransactions(
             )
         }
 
-        
         if (isExpanded) {
-            val sortedTransactions = transactions
-                .sortedByDescending { it.transaction.date }  
-
+            val sortedTransactions = transactions.sortedByDescending { it.transaction.date }
             sortedTransactions.forEach { transactionWithTags ->
                 TransactionDetailItem(
-                    transaction = transactionWithTags.transaction
+                    transaction = transactionWithTags.transaction,
+                    dateFormat = dateFormat
                 )
             }
         }
     }
 }
 
-/**
- * Category card for untagged transactions.
- */
 @Composable
 fun UntaggedCategoryItem(
     amount: Int,
     totalAmount: Int,
     transactions: List<TransactionWithTags>,
-    transactionType: TransactionType
+    transactionType: TransactionType,
+    dateFormat: DateFormatOption
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -557,9 +495,7 @@ fun UntaggedCategoryItem(
         (amount.toFloat() / totalAmount * 100).toInt()
     } else 0
 
-    Card(
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .clickable { expanded = !expanded }
@@ -591,12 +527,11 @@ fun UntaggedCategoryItem(
             if (expanded) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                val sortedTransactions = transactions
-                    .sortedByDescending { it.transaction.date }
-
+                val sortedTransactions = transactions.sortedByDescending { it.transaction.date }
                 sortedTransactions.forEach { transactionWithTags ->
                     TransactionDetailItem(
-                        transaction = transactionWithTags.transaction
+                        transaction = transactionWithTags.transaction,
+                        dateFormat = dateFormat
                     )
                 }
             }
@@ -604,12 +539,10 @@ fun UntaggedCategoryItem(
     }
 }
 
-/**
- * Individual transaction detail (read-only).
- */
 @Composable
 fun TransactionDetailItem(
-    transaction: Transaction
+    transaction: Transaction,
+    dateFormat: DateFormatOption
 ) {
     Column(
         modifier = Modifier
@@ -621,7 +554,7 @@ fun TransactionDetailItem(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "• ${transaction.date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))}",
+                text = "• ${dateFormat.format(transaction.date)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -631,7 +564,6 @@ fun TransactionDetailItem(
             )
         }
 
-        
         transaction.comment?.let { comment ->
             Text(
                 text = "\"$comment\"",

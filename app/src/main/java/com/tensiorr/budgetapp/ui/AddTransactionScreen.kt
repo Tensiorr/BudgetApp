@@ -1,7 +1,5 @@
 package com.tensiorr.budgetapp.ui
 
-import android.app.DatePickerDialog
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,7 +13,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -26,10 +23,10 @@ import com.tensiorr.budgetapp.data.entity.Category
 import com.tensiorr.budgetapp.data.entity.Tag
 import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionType
+import com.tensiorr.budgetapp.data.preferences.UserPreferences
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.util.Calendar
 import kotlin.math.roundToInt
 
 /**
@@ -49,6 +46,7 @@ fun AddTransactionScreen(
     tagDao: TagDao,
     transactionToEdit: Transaction? = null,
     existingTagId: Long? = null,
+    dateFormat: DateFormatOption,
     onSave: (Transaction, Long?) -> Unit
 ) {
     var amount by remember {
@@ -67,6 +65,8 @@ fun AddTransactionScreen(
     var showTagDialog by remember { mutableStateOf(false) }
     var showNewCategoryDialog by remember { mutableStateOf(false) }
     var showNewTagDialog by remember { mutableStateOf(false) }
+
+    var showDatePicker by remember { mutableStateOf(false) }
 
     var newCategoryName by remember { mutableStateOf("") }
     var newTagName by remember { mutableStateOf("") }
@@ -94,24 +94,6 @@ fun AddTransactionScreen(
     }
 
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-
-    val datePickerDialog = remember {
-        val calendar = Calendar.getInstance()
-        calendar.time = java.util.Date.from(
-            date.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant()
-        )
-
-        DatePickerDialog(
-            context,
-            { _, year, month, dayOfMonth ->
-                date = LocalDate.of(year, month + 1, dayOfMonth)
-            },
-            calendar.get(Calendar.YEAR),
-            calendar.get(Calendar.MONTH),
-            calendar.get(Calendar.DAY_OF_MONTH)
-        )
-    }
 
     fun showMessage(message: String) {
         snackbarMessage = message
@@ -190,20 +172,23 @@ fun AddTransactionScreen(
                     }
                 }
 
-                Box {
-                    OutlinedTextField(
-                        value = date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")),
-                        onValueChange = { },
-                        label = { Text("Data") },
-                        readOnly = true,
-                        modifier = Modifier.fillMaxWidth()
+                OutlinedButton(
+                    onClick = { showDatePicker = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Data: ${dateFormat.format(date)}")
+                }
+
+                if (showDatePicker) {
+                    CustomDatePickerDialog(
+                        initialDate = date,
+                        onDateSelected = { selectedDate ->
+                            date = selectedDate
+                            showDatePicker = false
+                        },
+                        onDismiss = { showDatePicker = false },
+                        dateFormat = dateFormat
                     )
-                    Surface(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .clickable { datePickerDialog.show() },
-                        color = Color.Transparent
-                    ) { }
                 }
 
                 OutlinedTextField(

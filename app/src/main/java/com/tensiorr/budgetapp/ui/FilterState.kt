@@ -48,17 +48,13 @@ sealed class DateRangeFilter {
     object Last3Months : DateRangeFilter()
     data class Custom(val startDate: LocalDate, val endDate: LocalDate) : DateRangeFilter()
 
-    /**
-     * Display name for UI.
-     */
-    fun displayName(): String = when (this) {
+    fun displayName(dateFormat: DateFormatOption = DateFormatOption.DD_MM_YYYY): String = when (this) {
         is AllTime -> "Wszystkie czasy"
         is ThisMonth -> "Ten miesiąc"
         is LastMonth -> "Ostatni miesiąc"
         is Last3Months -> "Ostatnie 3 miesiące"
         is Custom -> {
-            val formatter = java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy")
-            "${startDate.format(formatter)} - ${endDate.format(formatter)}"
+            "${dateFormat.format(startDate)} - ${dateFormat.format(endDate)}"
         }
     }
 }

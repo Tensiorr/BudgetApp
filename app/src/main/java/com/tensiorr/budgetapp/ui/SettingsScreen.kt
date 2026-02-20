@@ -24,7 +24,9 @@ fun SettingsScreen(
     onNavigateToCategories: () -> Unit,
     onNavigateToTheme: () -> Unit,
     onNavigateToStatistics: () -> Unit,
-    themeDisplayText: String
+    onNavigateToDateFormat: () -> Unit,
+    themeDisplayText: String,
+    dateFormatDisplayText: String
 ) {
     Column(
         modifier = Modifier
@@ -64,6 +66,15 @@ fun SettingsScreen(
                     title = "Statystyki",
                     subtitle = "Podsumowanie danych",
                     onClick = onNavigateToStatistics
+                )
+            }
+
+            item {
+                SettingsMenuItem(
+                    icon = Icons.Default.CalendarToday,
+                    title = "Format daty",
+                    subtitle = dateFormatDisplayText,
+                    onClick = onNavigateToDateFormat
                 )
             }
 

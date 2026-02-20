@@ -21,6 +21,8 @@ class UserPreferences(private val context: Context) {
         private val THEME_MODE_KEY = stringPreferencesKey("theme_mode")
         private val LANGUAGE_KEY = stringPreferencesKey("language")
         private val DEFAULT_CURRENCY_KEY = stringPreferencesKey("default_currency")
+        private val DATE_FORMAT_KEY = stringPreferencesKey("date_format")
+
     }
 
     /**
@@ -82,6 +84,23 @@ class UserPreferences(private val context: Context) {
             ThemeMode.valueOf(mode)
         } catch (e: IllegalArgumentException) {
             ThemeMode.SYSTEM
+        }
+    }
+
+    /**
+     * Get date format flow.
+     * Returns: "DD.MM.YYYY", "MM.DD.YYYY", "YYYY-MM-DD", etc.
+     */
+    val dateFormatFlow: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[DATE_FORMAT_KEY] ?: "DD.MM.YYYY"
+    }
+
+    /**
+     * Set date format.
+     */
+    suspend fun setDateFormat(format: String) {
+        context.dataStore.edit { preferences ->
+            preferences[DATE_FORMAT_KEY] = format
         }
     }
 }

@@ -49,6 +49,7 @@ fun TransactionListScreen(
     transactionsWithTags: List<TransactionWithTags>,
     categories: List<Category>,
     tagDao: TagDao,
+    dateFormat: DateFormatOption,
     onDelete: (Transaction) -> Unit,
     onEdit: (Transaction, Long?) -> Unit
 ) {
@@ -182,7 +183,6 @@ fun TransactionListScreen(
                     )
                 }
             }
-
             if (filterState.dateRange !is DateRangeFilter.AllTime) {
                 FilterChip(
                     selected = true,
@@ -191,7 +191,16 @@ fun TransactionListScreen(
                             dateRange = DateRangeFilter.AllTime
                         )
                     },
-                    label = { Text(filterState.dateRange.displayName()) },
+                    label = {
+                        Text(
+                            when (val range = filterState.dateRange) {
+                                is DateRangeFilter.Custom -> {
+                                    "${dateFormat.format(range.startDate)} - ${dateFormat.format(range.endDate)}"
+                                }
+                                else -> range.displayName()
+                            }
+                        )
+                    },
                     trailingIcon = {
                         Icon(
                             Icons.Default.Close,
@@ -260,6 +269,7 @@ fun TransactionListScreen(
                                 transaction = transactionWithTags.transaction,
                                 tags = transactionWithTags.tags,
                                 categories = categories,
+                                dateFormat = dateFormat,
                                 onClick = {
                                     val tagId = transactionWithTags.tags.firstOrNull()?.id
                                     onEdit(transactionWithTags.transaction, tagId)
@@ -301,6 +311,7 @@ fun TransactionListScreen(
             filterState = filterState,
             categories = categories,
             tagDao = tagDao,
+            dateFormat = dateFormat,
             onDismiss = { showFilterDialog = false },
             onApply = { newFilterState ->
                 filterState = newFilterState
@@ -366,12 +377,12 @@ fun applyFilters(
 /**
  * Individual transaction item card showing amount, tags with category path, date, and comment.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TransactionItem(
     transaction: Transaction,
     tags: List<Tag>,
     categories: List<Category>,
+    dateFormat: DateFormatOption,
     onClick: () -> Unit
 ) {
     val amountText = if (transaction.type == TransactionType.INCOME) {
@@ -422,7 +433,7 @@ fun TransactionItem(
             }
 
             Text(
-                text = transaction.date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")),
+                text = dateFormat.format(transaction.date),
                 style = MaterialTheme.typography.bodyMedium
             )
 
@@ -509,6 +520,7 @@ fun FilterDialog(
     filterState: FilterState,
     categories: List<Category>,
     tagDao: TagDao,
+    dateFormat: DateFormatOption,
     onDismiss: () -> Unit,
     onApply: (FilterState) -> Unit
 ) {
@@ -737,7 +749,9 @@ fun FilterDialog(
                                 label = {
                                     Text(
                                         if (tempFilterState.dateRange is DateRangeFilter.Custom) {
-                                            tempFilterState.dateRange.displayName()
+                                            (tempFilterState.dateRange as DateRangeFilter.Custom).let {
+                                                "${dateFormat.format(it.startDate)} - ${dateFormat.format(it.endDate)}"
+                                            }
                                         } else {
                                             "Własny zakres..."
                                         }
@@ -754,7 +768,8 @@ fun FilterDialog(
                                             dateRange = DateRangeFilter.Custom(startDate, endDate)
                                         )
                                         showCustomDateDialog = false
-                                    }
+                                    },
+                                    dateFormat = dateFormat
                                 )
                             }
                         }
