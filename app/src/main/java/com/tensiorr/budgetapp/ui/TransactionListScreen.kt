@@ -32,8 +32,6 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.util.Locale
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import com.tensiorr.budgetapp.data.dao.TagDao
 
 /**
@@ -45,6 +43,7 @@ import com.tensiorr.budgetapp.data.dao.TagDao
  * - Each transaction shows amount, category/tag path, date, and optional comment
  * - Confirmation dialog before deleting
  */
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionListScreen(
     transactionsWithTags: List<TransactionWithTags>,
@@ -367,6 +366,7 @@ fun applyFilters(
 /**
  * Individual transaction item card showing amount, tags with category path, date, and comment.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TransactionItem(
     transaction: Transaction,

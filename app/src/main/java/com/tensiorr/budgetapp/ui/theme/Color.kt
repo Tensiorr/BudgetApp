@@ -1,6 +1,5 @@
 package com.tensiorr.budgetapp.ui.theme
 
-import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.Color
 
 val Purple80 = Color(0xFFD0BCFF)

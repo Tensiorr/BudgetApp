@@ -11,7 +11,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tensiorr.budgetapp.BuildConfig
-import com.tensiorr.budgetapp.data.preferences.UserPreferences
 
 /**
  * Main settings screen with menu of configuration options.

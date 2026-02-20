@@ -1,6 +1,5 @@
 package com.tensiorr.budgetapp.ui
 
-import com.tensiorr.budgetapp.data.entity.TransactionType
 import java.time.LocalDate
 
 /**
