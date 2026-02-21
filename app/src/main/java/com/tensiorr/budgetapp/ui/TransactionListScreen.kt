@@ -32,7 +32,10 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.util.Locale
 import androidx.compose.foundation.layout.FlowRow
+import com.tensiorr.budgetapp.data.dao.SavingsGoalDao
 import com.tensiorr.budgetapp.data.dao.TagDao
+import com.tensiorr.budgetapp.data.entity.SavingsGoal
+import com.tensiorr.budgetapp.ui.theme.Yellow
 
 /**
  * Screen displaying list of transactions with balance summary.
@@ -49,6 +52,7 @@ fun TransactionListScreen(
     transactionsWithTags: List<TransactionWithTags>,
     categories: List<Category>,
     tagDao: TagDao,
+    savingsGoalDao: SavingsGoalDao,
     dateFormat: DateFormatOption,
     onDelete: (Transaction) -> Unit,
     onEdit: (Transaction, Long?) -> Unit
@@ -62,6 +66,23 @@ fun TransactionListScreen(
 
     val balance = CalculateBalance(filteredTransactions.map { it.transaction })
     var transactionToDelete by remember { mutableStateOf<Transaction?>(null) }
+
+    val savingsGoalsCache = remember(filteredTransactions) {
+        val cache = mutableMapOf<Long, SavingsGoal?>()
+
+        val goalIds = filteredTransactions
+            .filter { it.transaction.type == TransactionType.SAVING }
+            .mapNotNull { it.transaction.savingsGoalId }
+            .distinct()
+
+        kotlinx.coroutines.runBlocking {
+            goalIds.forEach { goalId ->
+                cache[goalId] = savingsGoalDao.getById(goalId)
+            }
+        }
+
+        cache
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Card(
@@ -120,6 +141,7 @@ fun TransactionListScreen(
                             when (filterState.transactionType) {
                                 TransactionTypeFilter.EXPENSE -> "Wydatki"
                                 TransactionTypeFilter.INCOME -> "Przychody"
+                                TransactionTypeFilter.SAVING -> "Oszczędności"
                                 else -> ""
                             }
                         )
@@ -183,6 +205,30 @@ fun TransactionListScreen(
                     )
                 }
             }
+
+            filterState.savingsGoalIds.forEach { goalId ->
+                val savingsGoal = savingsGoalsCache[goalId]
+
+                if (savingsGoal != null) {
+                    FilterChip(
+                        selected = true,
+                        onClick = {
+                            filterState = filterState.copy(
+                                savingsGoalIds = filterState.savingsGoalIds - goalId
+                            )
+                        },
+                        label = { Text(savingsGoal.name) },
+                        trailingIcon = {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Usuń",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    )
+                }
+            }
+
             if (filterState.dateRange !is DateRangeFilter.AllTime) {
                 FilterChip(
                     selected = true,
@@ -262,6 +308,12 @@ fun TransactionListScreen(
                         items = transactions,
                         key = { it.transaction.id }
                     ) { transactionWithTags ->
+                        val savingsGoal = if (transactionWithTags.transaction.savingsGoalId != null) {
+                            savingsGoalsCache[transactionWithTags.transaction.savingsGoalId]
+                        } else {
+                            null
+                        }
+
                         SwipeToDeleteItem(
                             onDelete = { transactionToDelete = transactionWithTags.transaction }
                         ) {
@@ -269,6 +321,7 @@ fun TransactionListScreen(
                                 transaction = transactionWithTags.transaction,
                                 tags = transactionWithTags.tags,
                                 categories = categories,
+                                savingsGoal = savingsGoal,
                                 dateFormat = dateFormat,
                                 onClick = {
                                     val tagId = transactionWithTags.tags.firstOrNull()?.id
@@ -311,6 +364,7 @@ fun TransactionListScreen(
             filterState = filterState,
             categories = categories,
             tagDao = tagDao,
+            savingsGoalDao = savingsGoalDao,
             dateFormat = dateFormat,
             onDismiss = { showFilterDialog = false },
             onApply = { newFilterState ->
@@ -334,6 +388,7 @@ fun applyFilters(
             TransactionTypeFilter.ALL -> true
             TransactionTypeFilter.EXPENSE -> transaction.type == TransactionType.EXPENSE
             TransactionTypeFilter.INCOME -> transaction.type == TransactionType.INCOME
+            TransactionTypeFilter.SAVING -> transaction.type == TransactionType.SAVING
         }
         if (!typeMatch) return@filter false
 
@@ -349,6 +404,13 @@ fun applyFilters(
                 filterState.tagIds.contains(tag.id)
             }
             if (!hasTag) return@filter false
+        }
+
+        if (filterState.savingsGoalIds.isNotEmpty()) {
+            val hasSavingsGoal = transaction.type == TransactionType.SAVING &&
+                    transaction.savingsGoalId != null &&
+                    filterState.savingsGoalIds.contains(transaction.savingsGoalId!!)
+            if (!hasSavingsGoal) return@filter false
         }
 
         val dateMatch = when (val range = filterState.dateRange) {
@@ -382,19 +444,20 @@ fun TransactionItem(
     transaction: Transaction,
     tags: List<Tag>,
     categories: List<Category>,
+    savingsGoal: SavingsGoal?,
     dateFormat: DateFormatOption,
     onClick: () -> Unit
 ) {
-    val amountText = if (transaction.type == TransactionType.INCOME) {
-        "+${transaction.amountInCents / 100.0} PLN"
-    } else {
-        "-${transaction.amountInCents / 100.0} PLN"
+    val amountText = when (transaction.type) {
+        TransactionType.INCOME -> "+${transaction.amountInCents / 100.0} PLN"
+        TransactionType.EXPENSE -> "-${transaction.amountInCents / 100.0} PLN"
+        TransactionType.SAVING -> "-${transaction.amountInCents / 100.0} PLN"
     }
 
-    val color = if (transaction.type == TransactionType.INCOME) {
-        Green
-    } else {
-        Red
+    val color = when (transaction.type) {
+        TransactionType.INCOME -> Green
+        TransactionType.EXPENSE -> Red
+        TransactionType.SAVING -> Yellow
     }
 
     Card(
@@ -411,7 +474,33 @@ fun TransactionItem(
                 color = color
             )
 
-            if (tags.isNotEmpty()) {
+            if (transaction.type == TransactionType.SAVING) {
+                savingsGoal?.let { goal ->
+                    AssistChip(
+                        onClick = onClick,
+                        label = {
+                            Text(
+                                goal.name,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        },
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                } ?: run {
+                    AssistChip(
+                        onClick = onClick,
+                        label = {
+                            Text(
+                                "(Usunięta skarbonka)",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        },
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+
+            if (transaction.type != TransactionType.SAVING && tags.isNotEmpty()) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.padding(top = 4.dp)
@@ -451,16 +540,21 @@ fun TransactionItem(
  * Calculates total balance from list of transactions.
  * Income adds to balance, expenses subtract.
  */
+@Composable
 fun CalculateBalance(transactions: List<Transaction>): Int {
-    var balance: Int = 0
-    transactions.forEach { transaction ->
-        if (transaction.type == TransactionType.INCOME) {
-            balance += transaction.amountInCents
-        } else {
-            balance -= transaction.amountInCents
-        }
-    }
-    return balance
+    val income = transactions
+        .filter { it.type == TransactionType.INCOME }
+        .sumOf { it.amountInCents }
+
+    val expenses = transactions
+        .filter { it.type == TransactionType.EXPENSE }
+        .sumOf { it.amountInCents }
+
+    val savings = transactions
+        .filter { it.type == TransactionType.SAVING }
+        .sumOf { it.amountInCents }
+
+    return income - expenses - savings
 }
 
 /**
@@ -520,6 +614,7 @@ fun FilterDialog(
     filterState: FilterState,
     categories: List<Category>,
     tagDao: TagDao,
+    savingsGoalDao: SavingsGoalDao,
     dateFormat: DateFormatOption,
     onDismiss: () -> Unit,
     onApply: (FilterState) -> Unit
@@ -531,8 +626,12 @@ fun FilterDialog(
             TransactionTypeFilter.ALL -> categories
             TransactionTypeFilter.EXPENSE -> categories.filter { it.transactionType == TransactionType.EXPENSE }
             TransactionTypeFilter.INCOME -> categories.filter { it.transactionType == TransactionType.INCOME }
+            TransactionTypeFilter.SAVING -> emptyList()
         }
     }
+
+    val activeSavingsGoals = savingsGoalDao.getActiveGoals()
+        .collectAsState(initial = emptyList())
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -552,18 +651,36 @@ fun FilterDialog(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        FilterChip(
-                            selected = tempFilterState.transactionType == TransactionTypeFilter.ALL,
-                            onClick = {
-                                tempFilterState = tempFilterState.copy(
-                                    transactionType = TransactionTypeFilter.ALL,
-                                    categoryIds = emptySet(),
-                                    tagIds = emptySet()
-                                )
-                            },
-                            label = { Text("Wszystkie") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = tempFilterState.transactionType == TransactionTypeFilter.ALL,
+                                onClick = {
+                                    tempFilterState = tempFilterState.copy(
+                                        transactionType = TransactionTypeFilter.ALL,
+                                        categoryIds = emptySet(),
+                                        tagIds = emptySet(),
+                                        savingsGoalIds = emptySet()
+                                    )
+                                },
+                                label = { Text("Wszystkie") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = tempFilterState.transactionType == TransactionTypeFilter.SAVING,
+                                onClick = {
+                                    tempFilterState = tempFilterState.copy(
+                                        transactionType = TransactionTypeFilter.SAVING,
+                                        categoryIds = emptySet(),
+                                        tagIds = emptySet()
+                                    )
+                                },
+                                label = { Text("Oszczędności") },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(4.dp))
 
@@ -577,7 +694,8 @@ fun FilterDialog(
                                     tempFilterState = tempFilterState.copy(
                                         transactionType = TransactionTypeFilter.EXPENSE,
                                         categoryIds = emptySet(),
-                                        tagIds = emptySet()
+                                        tagIds = emptySet(),
+                                        savingsGoalIds = emptySet()
                                     )
                                 },
                                 label = { Text("Wydatki") },
@@ -589,7 +707,8 @@ fun FilterDialog(
                                     tempFilterState = tempFilterState.copy(
                                         transactionType = TransactionTypeFilter.INCOME,
                                         categoryIds = emptySet(),
-                                        tagIds = emptySet()
+                                        tagIds = emptySet(),
+                                        savingsGoalIds = emptySet()
                                     )
                                 },
                                 label = { Text("Przychody") },
@@ -599,92 +718,149 @@ fun FilterDialog(
                     }
                 }
 
-                item {
-                    Column {
-                        Text(
-                            text = "Kategorie",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
+                if (tempFilterState.transactionType != TransactionTypeFilter.SAVING) {
+                    item {
+                        Column {
+                            Text(
+                                text = "Kategorie",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
 
-                        FlowRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            filteredCategories.forEach { category ->
-                                FilterChip(
-                                    selected = tempFilterState.categoryIds.contains(category.id),
-                                    onClick = {
-                                        tempFilterState = if (tempFilterState.categoryIds.contains(category.id)) {
-                                            tempFilterState.copy(
-                                                categoryIds = tempFilterState.categoryIds - category.id
-                                            )
-                                        } else {
-                                            tempFilterState.copy(
-                                                categoryIds = tempFilterState.categoryIds + category.id
-                                            )
-                                        }
-                                    },
-                                    label = { Text(category.name) }
+                            if (filteredCategories.isEmpty()) {
+                                Text(
+                                    text = "Brak kategorii",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                            } else {
+                                FlowRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    filteredCategories.forEach { category ->
+                                        FilterChip(
+                                            selected = tempFilterState.categoryIds.contains(category.id),
+                                            onClick = {
+                                                tempFilterState = if (tempFilterState.categoryIds.contains(category.id)) {
+                                                    tempFilterState.copy(
+                                                        categoryIds = tempFilterState.categoryIds - category.id
+                                                    )
+                                                } else {
+                                                    tempFilterState.copy(
+                                                        categoryIds = tempFilterState.categoryIds + category.id
+                                                    )
+                                                }
+                                            },
+                                            label = { Text(category.name) }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
 
-                item {
-                    Column {
-                        Text(
-                            text = "Tagi",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        val allCategoryTags = filteredCategories
-                            .filter {
-                                tempFilterState.categoryIds.isEmpty() ||
-                                        tempFilterState.categoryIds.contains(it.id)
-                            }
-                            .map { category ->
-                                tagDao.getTagsForCategory(category.id)
-                                    .collectAsState(initial = emptyList()).value
-                            }
-                            .flatten()
-                            .distinctBy { it.id }
-
-                        if (allCategoryTags.isEmpty()) {
+                if (tempFilterState.transactionType != TransactionTypeFilter.SAVING) {
+                    item {
+                        Column {
                             Text(
-                                text = if (tempFilterState.categoryIds.isEmpty()) {
-                                    "Wybierz kategorię aby zobaczyć tagi"
-                                } else {
-                                    "Brak tagów w wybranych kategoriach"
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = "Tagi",
+                                style = MaterialTheme.typography.titleSmall
                             )
-                        } else {
-                            FlowRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                allCategoryTags.forEach { tag ->
-                                    FilterChip(
-                                        selected = tempFilterState.tagIds.contains(tag.id),
-                                        onClick = {
-                                            tempFilterState = if (tempFilterState.tagIds.contains(tag.id)) {
-                                                tempFilterState.copy(
-                                                    tagIds = tempFilterState.tagIds - tag.id
-                                                )
-                                            } else {
-                                                tempFilterState.copy(
-                                                    tagIds = tempFilterState.tagIds + tag.id
-                                                )
-                                            }
-                                        },
-                                        label = { Text(tag.name) }
-                                    )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            val allCategoryTags = filteredCategories
+                                .filter {
+                                    tempFilterState.categoryIds.isEmpty() ||
+                                            tempFilterState.categoryIds.contains(it.id)
+                                }
+                                .map { category ->
+                                    tagDao.getTagsForCategory(category.id)
+                                        .collectAsState(initial = emptyList()).value
+                                }
+                                .flatten()
+                                .distinctBy { it.id }
+
+                            if (allCategoryTags.isEmpty()) {
+                                Text(
+                                    text = if (tempFilterState.categoryIds.isEmpty()) {
+                                        "Wybierz kategorię aby zobaczyć tagi"
+                                    } else {
+                                        "Brak tagów w wybranych kategoriach"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                FlowRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    allCategoryTags.forEach { tag ->
+                                        FilterChip(
+                                            selected = tempFilterState.tagIds.contains(tag.id),
+                                            onClick = {
+                                                tempFilterState = if (tempFilterState.tagIds.contains(tag.id)) {
+                                                    tempFilterState.copy(
+                                                        tagIds = tempFilterState.tagIds - tag.id
+                                                    )
+                                                } else {
+                                                    tempFilterState.copy(
+                                                        tagIds = tempFilterState.tagIds + tag.id
+                                                    )
+                                                }
+                                            },
+                                            label = { Text(tag.name) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (tempFilterState.transactionType == TransactionTypeFilter.ALL ||
+                    tempFilterState.transactionType == TransactionTypeFilter.SAVING) {
+                    item {
+                        Column {
+                            Text(
+                                text = "Skarbonki",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            if (activeSavingsGoals.value.isEmpty()) {
+                                Text(
+                                    text = "Brak aktywnych skarboniek",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                FlowRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    activeSavingsGoals.value.forEach { goal ->
+                                        FilterChip(
+                                            selected = tempFilterState.savingsGoalIds.contains(goal.id),
+                                            onClick = {
+                                                tempFilterState = if (tempFilterState.savingsGoalIds.contains(goal.id)) {
+                                                    tempFilterState.copy(
+                                                        savingsGoalIds = tempFilterState.savingsGoalIds - goal.id
+                                                    )
+                                                } else {
+                                                    tempFilterState.copy(
+                                                        savingsGoalIds = tempFilterState.savingsGoalIds + goal.id
+                                                    )
+                                                }
+                                            },
+                                            label = { Text(goal.name) }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -707,7 +883,7 @@ fun FilterDialog(
                                         dateRange = DateRangeFilter.AllTime
                                     )
                                 },
-                                label = { Text("Wszystkie czasy") },
+                                label = { Text("Cały zakres") },
                                 modifier = Modifier.fillMaxWidth()
                             )
                             FilterChip(

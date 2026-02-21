@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Text
 import androidx.compose.material3.NavigationBar
@@ -24,11 +25,13 @@ import androidx.lifecycle.lifecycleScope
 import com.tensiorr.budgetapp.data.database.AppDatabase
 import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionTagCrossRef
+import com.tensiorr.budgetapp.data.entity.TransactionType
 import com.tensiorr.budgetapp.data.preferences.UserPreferences
 import com.tensiorr.budgetapp.ui.AddTransactionScreen
 import com.tensiorr.budgetapp.ui.DateFormatOption
 import com.tensiorr.budgetapp.ui.DateFormatSelectionScreen
 import com.tensiorr.budgetapp.ui.ManageCategoriesScreen
+import com.tensiorr.budgetapp.ui.SavingsScreen
 import com.tensiorr.budgetapp.ui.SettingsScreen
 import com.tensiorr.budgetapp.ui.StatisticsScreen
 import com.tensiorr.budgetapp.ui.SummaryScreen
@@ -92,10 +95,12 @@ fun BudgetAppNavigation(
     var showThemeSelection by remember { mutableStateOf(false) }
     var showStatistics by remember { mutableStateOf(false) }
     var showDateFormatSelection by remember { mutableStateOf(false) }
+    var showSavings by remember { mutableStateOf(false) }
 
     val dao = db.transactionDao()
     val tagDao = db.tagDao()
     val categoryDao = db.categoryDao()
+    val savingsGoalDao = db.savingsGoalDao()
 
     val scope = rememberCoroutineScope()
     val transactionsWithTags = dao.getAllTransactionsWithTags()
@@ -123,6 +128,7 @@ fun BudgetAppNavigation(
         showThemeSelection = false
         showStatistics = false
         showDateFormatSelection = false
+        showSavings = false
         selectedTab = tab
     }
 
@@ -136,8 +142,8 @@ fun BudgetAppNavigation(
                     onClick = { navigateToTab(0) }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.BarChart, contentDescription = "Zestawienia") },
-                    label = { Text("Zestawienia") },
+                    icon = { Icon(Icons.Default.BarChart, contentDescription = "Bilans") },
+                    label = { Text("Bilans") },
                     selected = selectedTab == 1,
                     onClick = { navigateToTab(1) }
                 )
@@ -148,10 +154,16 @@ fun BudgetAppNavigation(
                     onClick = { navigateToTab(2) }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.Settings, contentDescription = "Ustawienia") },
-                    label = { Text("Ustawienia") },
+                    icon = { Icon(Icons.Default.Savings, contentDescription = "Skarbonki") },
+                    label = { Text("Skarbonki") },
                     selected = selectedTab == 3,
                     onClick = { navigateToTab(3) }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Settings, contentDescription = "Ustawienia") },
+                    label = { Text("Ustawienia") },
+                    selected = selectedTab == 4,
+                    onClick = { navigateToTab(4) }
                 )
             }
         }
@@ -211,6 +223,19 @@ fun BudgetAppNavigation(
                         }
                     )
                 }
+                showSavings -> {
+                    BackHandler {
+                        showSavings = false
+                        selectedTab = 0
+                    }
+                    SavingsScreen(
+                        savingsGoalDao = savingsGoalDao,
+                        dateFormat = dateFormat,
+                        onNavigateBack = {
+                            showSavings = false
+                        }
+                    )
+                }
                 transactionToEdit != null -> {
                     BackHandler {
                         transactionToEdit = null
@@ -220,12 +245,24 @@ fun BudgetAppNavigation(
                     AddTransactionScreen(
                         categoryDao = categoryDao,
                         tagDao = tagDao,
+                        savingsGoalDao = savingsGoalDao,
                         transactionToEdit = transactionToEdit!!.first,
                         existingTagId = transactionToEdit!!.second,
                         dateFormat = dateFormat,
                         onSave = { transaction, tagId ->
                             scope.launch {
+                                val oldTransaction = transactionToEdit!!.first
+
+                                if (oldTransaction.type == TransactionType.SAVING && oldTransaction.savingsGoalId != null) {
+                                    savingsGoalDao.addToGoal(oldTransaction.savingsGoalId!!, -oldTransaction.amountInCents)
+                                }
+
                                 dao.update(transaction)
+
+                                if (transaction.type == TransactionType.SAVING && transaction.savingsGoalId != null) {
+                                    savingsGoalDao.addToGoal(transaction.savingsGoalId!!, transaction.amountInCents)
+                                }
+
                                 tagDao.deleteTransactionTagCrossRefsForTransaction(transaction.id)
                                 tagId?.let { id ->
                                     tagDao.insertTransactionTagCrossRef(
@@ -243,9 +280,14 @@ fun BudgetAppNavigation(
                         transactionsWithTags = transactionsWithTags.value,
                         categories = categories.value,
                         tagDao = tagDao,
+                        savingsGoalDao = savingsGoalDao,
                         dateFormat = dateFormat,
                         onDelete = { transaction ->
                             scope.launch {
+                                if (transaction.type == TransactionType.SAVING && transaction.savingsGoalId != null) {
+                                    savingsGoalDao.addToGoal(transaction.savingsGoalId!!, -transaction.amountInCents)
+                                }
+
                                 dao.delete(transaction)
                             }
                         },
@@ -261,6 +303,7 @@ fun BudgetAppNavigation(
                     SummaryScreen(
                         transactions = transactionsWithTags.value,
                         categories = categories.value,
+                        savingsGoalDao = savingsGoalDao,
                         dateFormat = dateFormat
                     )
                 }
@@ -272,10 +315,16 @@ fun BudgetAppNavigation(
                     AddTransactionScreen(
                         categoryDao = categoryDao,
                         tagDao = tagDao,
+                        savingsGoalDao = savingsGoalDao,
                         dateFormat = dateFormat,
                         onSave = { transaction, tagId ->
                             scope.launch {
                                 val transactionId = dao.insert(transaction)
+
+                                if (transaction.type == TransactionType.SAVING && transaction.savingsGoalId != null) {
+                                    savingsGoalDao.addToGoal(transaction.savingsGoalId!!, transaction.amountInCents)
+                                }
+
                                 tagId?.let { id ->
                                     tagDao.insertTransactionTagCrossRef(
                                         TransactionTagCrossRef(transactionId, id)
@@ -287,6 +336,15 @@ fun BudgetAppNavigation(
                     )
                 }
                 selectedTab == 3 -> {
+                    BackHandler {
+                        navigateToTab(0)
+                    }
+                    SavingsScreen(
+                        savingsGoalDao = savingsGoalDao,
+                        dateFormat = dateFormat
+                    )
+                }
+                selectedTab == 4 -> {
                     BackHandler {
                         navigateToTab(0)
                     }

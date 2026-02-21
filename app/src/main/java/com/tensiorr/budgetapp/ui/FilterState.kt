@@ -9,6 +9,7 @@ data class FilterState(
     val transactionType: TransactionTypeFilter = TransactionTypeFilter.ALL,
     val categoryIds: Set<Long> = emptySet(),
     val tagIds: Set<Long> = emptySet(),
+    val savingsGoalIds: Set<Long> = emptySet(),
     val dateRange: DateRangeFilter = DateRangeFilter.AllTime
 ) {
     /**
@@ -19,6 +20,7 @@ data class FilterState(
         if (transactionType != TransactionTypeFilter.ALL) count++
         count += categoryIds.size
         count += tagIds.size
+        count += savingsGoalIds.size
         if (dateRange != DateRangeFilter.AllTime) count++
         return count
     }
@@ -35,7 +37,8 @@ data class FilterState(
 enum class TransactionTypeFilter {
     ALL,
     EXPENSE,
-    INCOME
+    INCOME,
+    SAVING
 }
 
 /**

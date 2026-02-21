@@ -11,16 +11,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.tensiorr.budgetapp.data.dao.SavingsGoalDao
 import com.tensiorr.budgetapp.data.entity.Category
+import com.tensiorr.budgetapp.data.entity.SavingsGoal
 import com.tensiorr.budgetapp.data.entity.Tag
 import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionType
 import com.tensiorr.budgetapp.data.entity.TransactionWithTags
-import com.tensiorr.budgetapp.data.preferences.UserPreferences
 import com.tensiorr.budgetapp.ui.theme.Green
 import com.tensiorr.budgetapp.ui.theme.Red
+import com.tensiorr.budgetapp.ui.theme.Yellow
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -45,6 +46,7 @@ fun getAvailableMonths(transactions: List<Transaction>): List<YearMonth> {
 fun SummaryScreen(
     transactions: List<TransactionWithTags>,
     categories: List<Category>,
+    savingsGoalDao: SavingsGoalDao,
     dateFormat: DateFormatOption
 ) {
     var selectedRangeType by remember { mutableStateOf<DateRangeType>(
@@ -73,7 +75,7 @@ fun SummaryScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = "Zestawienia",
+            text = "Bilans",
             style = MaterialTheme.typography.headlineMedium
         )
 
@@ -87,6 +89,7 @@ fun SummaryScreen(
         SummaryCards(
             filteredTransactions = filteredTransactions,
             categories = categories,
+            savingsGoalDao = savingsGoalDao,
             dateFormat = dateFormat
         )
     }
@@ -171,6 +174,7 @@ fun DateRangeSelector(
 fun SummaryCards(
     filteredTransactions: List<TransactionWithTags>,
     categories: List<Category>,
+    savingsGoalDao: SavingsGoalDao,
     dateFormat: DateFormatOption
 ) {
     val income = filteredTransactions
@@ -181,7 +185,11 @@ fun SummaryCards(
         .filter { it.transaction.type == TransactionType.EXPENSE }
         .sumOf { it.transaction.amountInCents }
 
-    val balance = income - expenses
+    val savings = filteredTransactions
+        .filter { it.transaction.type == TransactionType.SAVING }
+        .sumOf { it.transaction.amountInCents }
+
+    val balance = income - expenses - savings
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Card(
@@ -198,7 +206,10 @@ fun SummaryCards(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(text = "SALDO", style = MaterialTheme.typography.labelMedium)
+                Text(
+                    text = "SALDO",
+                    style = MaterialTheme.typography.labelMedium
+                )
                 Text(
                     text = formatAmount(balance) + " PLN",
                     style = MaterialTheme.typography.headlineLarge
@@ -220,7 +231,10 @@ fun SummaryCards(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(text = "PRZYCHODY", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        text = "PRZYCHODY",
+                        style = MaterialTheme.typography.labelSmall
+                    )
                     Text(
                         text = formatAmount(income) + " PLN",
                         style = MaterialTheme.typography.titleLarge,
@@ -239,11 +253,38 @@ fun SummaryCards(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(text = "WYDATKI", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        text = "WYDATKI",
+                        style = MaterialTheme.typography.labelSmall
+                    )
                     Text(
                         text = formatAmount(expenses) + " PLN",
                         style = MaterialTheme.typography.titleLarge,
                         color = Red
+                    )
+                }
+            }
+        }
+
+        if (savings > 0) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "OSZCZĘDNOŚCI",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    Text(
+                        text = formatAmount(savings) + " PLN",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = Yellow
                     )
                 }
             }
@@ -268,6 +309,15 @@ fun SummaryCards(
                     categories = categories,
                     transactionType = TransactionType.INCOME,
                     title = "KATEGORIE PRZYCHODÓW",
+                    dateFormat = dateFormat
+                )
+            }
+
+            if (savings > 0) {
+                SavingsBreakdown(
+                    filteredTransactions = filteredTransactions,
+                    totalAmount = savings,
+                    savingsGoalDao = savingsGoalDao,
                     dateFormat = dateFormat
                 )
             }
@@ -461,7 +511,7 @@ fun TagItemWithTransactions(
                     contentDescription = null,
                     modifier = Modifier.size(16.dp)
                 )
-                Text(text = "↳ ${tag.name}", style = MaterialTheme.typography.bodyMedium)
+                Text(text = "${tag.name}", style = MaterialTheme.typography.bodyMedium)
             }
             Text(
                 text = formatAmount(amount) + " PLN",
@@ -571,6 +621,150 @@ fun TransactionDetailItem(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 8.dp, top = 2.dp)
             )
+        }
+    }
+}
+
+/**
+ * Displays savings breakdown by savings goals.
+ */
+@Composable
+fun SavingsBreakdown(
+    filteredTransactions: List<TransactionWithTags>,
+    totalAmount: Int,
+    savingsGoalDao: SavingsGoalDao,
+    dateFormat: DateFormatOption
+) {
+    var expandedGoals by remember { mutableStateOf<Set<Long?>>(emptySet()) }
+
+    val savingsGoalsCache = remember(filteredTransactions) {
+        val cache = mutableMapOf<Long, SavingsGoal?>()
+        val goalIds = filteredTransactions
+            .filter { it.transaction.type == TransactionType.SAVING }
+            .mapNotNull { it.transaction.savingsGoalId }
+            .distinct()
+
+        kotlinx.coroutines.runBlocking {
+            goalIds.forEach { goalId ->
+                cache[goalId] = savingsGoalDao.getById(goalId)
+            }
+        }
+        cache
+    }
+
+    val transactionsByGoal = filteredTransactions
+        .filter { it.transaction.type == TransactionType.SAVING }
+        .groupBy { it.transaction.savingsGoalId }
+        .mapValues { (_, transactions) ->
+            transactions.sumOf { it.transaction.amountInCents }
+        }
+        .toList()
+        .sortedByDescending { it.second }
+
+    if (transactionsByGoal.isEmpty()) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "OSZCZĘDNOŚCI WG SKARBONKI",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        transactionsByGoal.forEach { (goalId, amount) ->
+            key(goalId ?: "deleted", filteredTransactions.size) {
+                SavingsGoalItem(
+                    goalId = goalId,
+                    amount = amount,
+                    totalAmount = totalAmount,
+                    transactions = filteredTransactions,
+                    savingsGoalsCache = savingsGoalsCache,
+                    isExpanded = expandedGoals.contains(goalId),
+                    onToggleExpand = {
+                        expandedGoals = if (expandedGoals.contains(goalId)) {
+                            expandedGoals - goalId
+                        } else {
+                            expandedGoals + goalId
+                        }
+                    },
+                    dateFormat = dateFormat
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Individual savings goal card in summary - expandable to show transactions.
+ */
+@Composable
+fun SavingsGoalItem(
+    goalId: Long?,
+    amount: Int,
+    totalAmount: Int,
+    transactions: List<TransactionWithTags>,
+    savingsGoalsCache: Map<Long, SavingsGoal?>,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
+    dateFormat: DateFormatOption
+) {
+    val goalName = if (goalId == null) {
+        "(Usunięta skarbonka)"
+    } else {
+        savingsGoalsCache[goalId]?.name ?: "Ładowanie..."
+    }
+
+    val percentage = if (totalAmount > 0) {
+        (amount.toFloat() / totalAmount * 100).toInt()
+    } else 0
+
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .clickable { onToggleExpand() }
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = goalName,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = "$percentage%",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    text = formatAmount(amount) + " PLN",
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+
+            if (isExpanded) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                val goalTransactions = transactions.filter {
+                    it.transaction.type == TransactionType.SAVING &&
+                            it.transaction.savingsGoalId == goalId
+                }
+
+                val sortedTransactions = goalTransactions
+                    .sortedByDescending { it.transaction.date }
+
+                sortedTransactions.forEach { transactionWithTags ->
+                    TransactionDetailItem(
+                        transaction = transactionWithTags.transaction,
+                        dateFormat = dateFormat
+                    )
+                }
+            }
         }
     }
 }

@@ -5,7 +5,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -13,67 +12,63 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.tensiorr.budgetapp.data.dao.CategoryDao
+import com.tensiorr.budgetapp.data.dao.SavingsGoalDao
 import com.tensiorr.budgetapp.data.dao.TagDao
 import com.tensiorr.budgetapp.data.entity.Category
+import com.tensiorr.budgetapp.data.entity.SavingsGoal
 import com.tensiorr.budgetapp.data.entity.Tag
 import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionType
-import com.tensiorr.budgetapp.data.preferences.UserPreferences
 import kotlinx.coroutines.launch
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import kotlin.math.roundToInt
 
-/**
- * Screen for adding/editing transactions with two-level category/tag selection.
- *
- * Flow:
- * 1. User fills in amount, type, date, and optional comment
- * 2. User selects category → then selects tag from that category
- * 3. On save, creates or updates transaction with optional tag relationship
- *
- * @param transactionToEdit If provided, enters edit mode and pre-fills fields
- * @param existingTagId Tag ID associated with transaction being edited
- */
 @Composable
 fun AddTransactionScreen(
     categoryDao: CategoryDao,
     tagDao: TagDao,
+    savingsGoalDao: SavingsGoalDao,
     transactionToEdit: Transaction? = null,
     existingTagId: Long? = null,
     dateFormat: DateFormatOption,
     onSave: (Transaction, Long?) -> Unit
 ) {
-    var amount by remember {
+    var amountText by remember {
         mutableStateOf(
             transactionToEdit?.let { (it.amountInCents / 100.0).toString() } ?: ""
         )
     }
-    var type by remember { mutableStateOf(transactionToEdit?.type ?: TransactionType.EXPENSE) }
+
+    var transactionType by remember {
+        mutableStateOf(transactionToEdit?.type ?: TransactionType.EXPENSE)
+    }
+
+    var selectedSavingsGoalId by remember {
+        mutableStateOf(transactionToEdit?.savingsGoalId)
+    }
+
     var date by remember { mutableStateOf(transactionToEdit?.date ?: LocalDate.now()) }
     var comment by remember { mutableStateOf(transactionToEdit?.comment ?: "") }
-
     var selectedCategoryId by remember { mutableStateOf<Long?>(null) }
-    var selectedTagId by remember { mutableStateOf(existingTagId) }
+    var selectedTagId by remember { mutableStateOf<Long?>(existingTagId) }
 
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showSavingsGoalDialog by remember { mutableStateOf(false) }
+    var showAddGoalDialog by remember { mutableStateOf(false) }
     var showCategoryDialog by remember { mutableStateOf(false) }
     var showTagDialog by remember { mutableStateOf(false) }
     var showNewCategoryDialog by remember { mutableStateOf(false) }
     var showNewTagDialog by remember { mutableStateOf(false) }
 
-    var showDatePicker by remember { mutableStateOf(false) }
-
     var newCategoryName by remember { mutableStateOf("") }
     var newTagName by remember { mutableStateOf("") }
-
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
 
-    val categories = categoryDao.getCategoriesForType(type)
+    val scope = rememberCoroutineScope()
+
+    val categories = categoryDao.getCategoriesForType(transactionType)
         .collectAsState(initial = emptyList())
 
     val tagsForCategory = remember(selectedCategoryId) {
@@ -84,6 +79,18 @@ fun AddTransactionScreen(
         }
     }?.collectAsState(initial = emptyList())
 
+    val activeSavingsGoals = savingsGoalDao.getActiveGoals()
+        .collectAsState(initial = emptyList())
+
+    LaunchedEffect(transactionType) {
+        if (transactionType == TransactionType.SAVING) {
+            selectedCategoryId = null
+            selectedTagId = null
+        } else {
+            selectedSavingsGoalId = null
+        }
+    }
+
     LaunchedEffect(existingTagId, categories.value) {
         if (existingTagId != null && selectedCategoryId == null && categories.value.isNotEmpty()) {
             val tag = tagDao.getTagById(existingTagId)
@@ -92,8 +99,6 @@ fun AddTransactionScreen(
             }
         }
     }
-
-    val scope = rememberCoroutineScope()
 
     fun showMessage(message: String) {
         snackbarMessage = message
@@ -109,66 +114,106 @@ fun AddTransactionScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = if (transactionToEdit != null) "Edytuj transakcję" else "Nowa transakcja",
+                    text = if (transactionToEdit == null) "Nowa transakcja" else "Edytuj transakcję",
                     style = MaterialTheme.typography.headlineMedium
                 )
 
                 OutlinedTextField(
-                    value = amount,
+                    value = amountText,
                     onValueChange = { newValue ->
                         val normalized = newValue.replace(',', '.')
-                        if (normalized.isEmpty() ||
-                            normalized.matches(Regex("^\\d*\\.?\\d{0,2}$"))) {
-                            amount = newValue
+                        if (normalized.isEmpty() || normalized.matches(Regex("^\\d*\\.?\\d{0,2}$"))) {
+                            amountText = newValue
                         }
                     },
                     label = { Text("Kwota (PLN)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth()
+                    placeholder = { Text("0.00") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Wydatek")
-                    Switch(
-                        checked = type == TransactionType.INCOME,
-                        onCheckedChange = { isIncome ->
-                            type = if (isIncome) TransactionType.INCOME
-                            else TransactionType.EXPENSE
-                            selectedCategoryId = null
-                            selectedTagId = null
-                        }
+                    FilterChip(
+                        selected = transactionType == TransactionType.EXPENSE,
+                        onClick = { transactionType = TransactionType.EXPENSE },
+                        label = { Text("Wydatek") },
+                        modifier = Modifier.weight(1f)
                     )
-                    Text("Przychód")
+
+                    FilterChip(
+                        selected = transactionType == TransactionType.INCOME,
+                        onClick = { transactionType = TransactionType.INCOME },
+                        label = { Text("Przychód") },
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    FilterChip(
+                        selected = transactionType == TransactionType.SAVING,
+                        onClick = { transactionType = TransactionType.SAVING },
+                        label = { Text("Oszczędności") },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
 
-                OutlinedButton(
-                    onClick = { showCategoryDialog = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Dodaj kategorię")
-                }
-
-                selectedTagId?.let { tagId ->
-                    val tag = tagsForCategory?.value?.find { it.id == tagId }
-                    val category = categories.value.find { it.id == selectedCategoryId }
-
-                    if (tag != null && category != null) {
-                        AssistChip(
-                            onClick = {
-                                selectedTagId = null
-                                selectedCategoryId = null
-                            },
-                            label = { Text("${category.name} > ${tag.name}") },
-                            trailingIcon = {
-                                Icon(Icons.Default.Close, contentDescription = "Usuń")
+                if (transactionType == TransactionType.SAVING) {
+                    OutlinedButton(
+                        onClick = { showSavingsGoalDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            if (selectedSavingsGoalId == null) {
+                                "Wybierz skarbonkę"
+                            } else {
+                                "Zmień skarbonkę"
                             }
                         )
+                    }
+
+                    selectedSavingsGoalId?.let { goalId ->
+                        val goal = activeSavingsGoals.value.find { it.id == goalId }
+                        goal?.let {
+                            AssistChip(
+                                onClick = { selectedSavingsGoalId = null },
+                                label = { Text(it.name) },
+                                trailingIcon = {
+                                    Icon(Icons.Default.Close, contentDescription = "Usuń")
+                                }
+                            )
+                        }
+                    }
+                }
+
+                if (transactionType != TransactionType.SAVING) {
+                    OutlinedButton(
+                        onClick = { showCategoryDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Dodaj kategorię")
+                    }
+
+                    selectedTagId?.let { tagId ->
+                        val tag = tagsForCategory?.value?.find { it.id == tagId }
+                        val category = categories.value.find { it.id == selectedCategoryId }
+
+                        if (tag != null && category != null) {
+                            AssistChip(
+                                onClick = {
+                                    selectedTagId = null
+                                    selectedCategoryId = null
+                                },
+                                label = { Text("${category.name} > ${tag.name}") },
+                                trailingIcon = {
+                                    Icon(Icons.Default.Close, contentDescription = "Usuń")
+                                }
+                            )
+                        }
                     }
                 }
 
@@ -179,51 +224,130 @@ fun AddTransactionScreen(
                     Text("Data: ${dateFormat.format(date)}")
                 }
 
-                if (showDatePicker) {
-                    CustomDatePickerDialog(
-                        initialDate = date,
-                        onDateSelected = { selectedDate ->
-                            date = selectedDate
-                            showDatePicker = false
-                        },
-                        onDismiss = { showDatePicker = false },
-                        dateFormat = dateFormat
-                    )
-                }
-
                 OutlinedTextField(
                     value = comment,
                     onValueChange = { comment = it },
                     label = { Text("Komentarz (opcjonalnie)") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 3
                 )
             }
 
             Button(
                 onClick = {
-                    val amountInCents = (amount.replace(',', '.')
+                    val amountInCents = (amountText.replace(',', '.')
                         .toDoubleOrNull()
                         ?.times(100))
-                        ?.roundToInt() ?: 0
+                        ?.toInt() ?: 0
 
                     if (amountInCents > 0) {
                         val transaction = Transaction(
                             id = transactionToEdit?.id ?: 0,
                             amountInCents = amountInCents,
-                            type = type,
+                            type = transactionType,
                             date = date,
-                            comment = comment.ifBlank { null }
+                            comment = comment.ifBlank { null },
+                            savingsGoalId = if (transactionType == TransactionType.SAVING) {
+                                selectedSavingsGoalId
+                            } else {
+                                null
+                            }
                         )
-                        onSave(transaction, selectedTagId)
+
+                        val tagIdToSave = if (transactionType == TransactionType.SAVING) {
+                            null
+                        } else {
+                            selectedTagId
+                        }
+
+                        onSave(transaction, tagIdToSave)
                     }
                 },
-                enabled = amount.isNotBlank() && amount.replace(',', '.').toDoubleOrNull() != null,
+                enabled = amountText.isNotBlank() &&
+                        amountText.replace(',', '.').toDoubleOrNull() != null &&
+                        (transactionType != TransactionType.SAVING || selectedSavingsGoalId != null),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
-                Text("Zapisz")
+                Text(if (transactionToEdit == null) "Dodaj" else "Zapisz")
             }
+        }
+
+        if (showSavingsGoalDialog) {
+            AlertDialog(
+                onDismissRequest = { showSavingsGoalDialog = false },
+                title = { Text("Wybierz skarbonkę") },
+                text = {
+                    LazyColumn {
+                        items(activeSavingsGoals.value) { goal ->
+                            TextButton(
+                                onClick = {
+                                    selectedSavingsGoalId = goal.id
+                                    showSavingsGoalDialog = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Text(
+                                        text = goal.name,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Text(
+                                        text = "${formatAmount(goal.currentAmount)} / ${formatAmount(goal.targetAmount)} PLN",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
+                        item {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                            TextButton(
+                                onClick = {
+                                    showSavingsGoalDialog = false
+                                    showAddGoalDialog = true
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Nowa skarbonka")
+                            }
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = { showSavingsGoalDialog = false }) {
+                        Text("Anuluj")
+                    }
+                }
+            )
+        }
+
+        if (showAddGoalDialog) {
+            AddEditSavingsGoalDialog(
+                goal = null,
+                savingsGoalDao = savingsGoalDao,
+                dateFormat = dateFormat,
+                onDismiss = { showAddGoalDialog = false },
+                onConfirm = { name, targetAmount, deadline ->
+                    scope.launch {
+                        val newGoalId = savingsGoalDao.insert(
+                            SavingsGoal(
+                                name = name,
+                                targetAmount = targetAmount,
+                                deadline = deadline,
+                                createdAt = LocalDate.now()
+                            )
+                        )
+                        selectedSavingsGoalId = newGoalId
+                        showAddGoalDialog = false
+                    }
+                }
+            )
         }
 
         if (showCategoryDialog) {
@@ -347,7 +471,7 @@ fun AddTransactionScreen(
                                 scope.launch {
                                     val existing = categoryDao.getCategoryByNameAndType(
                                         newCategoryName.trim(),
-                                        type
+                                        transactionType
                                     )
 
                                     if (existing != null) {
@@ -361,7 +485,7 @@ fun AddTransactionScreen(
                                         val categoryId = categoryDao.insert(
                                             Category(
                                                 name = newCategoryName.trim(),
-                                                transactionType = type
+                                                transactionType = transactionType
                                             )
                                         )
                                         selectedCategoryId = categoryId
@@ -421,7 +545,7 @@ fun AddTransactionScreen(
                                             Tag(
                                                 name = newTagName.trim(),
                                                 categoryId = selectedCategoryId!!,
-                                                transactionType = type
+                                                transactionType = transactionType
                                             )
                                         )
                                         selectedTagId = tagId
@@ -443,6 +567,18 @@ fun AddTransactionScreen(
                         Text("Anuluj")
                     }
                 }
+            )
+        }
+
+        if (showDatePicker) {
+            CustomDatePickerDialog(
+                initialDate = date,
+                onDateSelected = { selectedDate ->
+                    date = selectedDate
+                    showDatePicker = false
+                },
+                onDismiss = { showDatePicker = false },
+                dateFormat = dateFormat
             )
         }
 
