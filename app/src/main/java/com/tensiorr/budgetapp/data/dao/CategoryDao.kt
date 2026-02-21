@@ -5,6 +5,12 @@ import com.tensiorr.budgetapp.data.entity.Category
 import com.tensiorr.budgetapp.data.entity.TransactionType
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * Data Access Object for categories.
+ *
+ * Provides operations for managing transaction categories,
+ * including queries by type and transaction count tracking.
+ */
 @Dao
 interface CategoryDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)

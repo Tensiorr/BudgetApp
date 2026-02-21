@@ -4,6 +4,12 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 
+/**
+ * Many-to-many relationship between transactions and tags.
+ *
+ * @property transactionId Transaction ID
+ * @property tagId Tag ID
+ */
 @Entity(
     tableName = "transaction_tag_cross_ref",
     primaryKeys = ["transactionId", "tagId"],

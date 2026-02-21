@@ -7,6 +7,12 @@ import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 import androidx.room.Transaction as RoomTransaction
 
+/**
+ * Data Access Object for transactions.
+ *
+ * Provides CRUD operations and queries for transactions,
+ * including relationships with tags via TransactionWithTags.
+ */
 @Dao
 interface TransactionDao {
     @Insert

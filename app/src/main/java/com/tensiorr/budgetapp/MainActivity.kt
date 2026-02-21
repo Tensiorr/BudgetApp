@@ -27,22 +27,30 @@ import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionTagCrossRef
 import com.tensiorr.budgetapp.data.entity.TransactionType
 import com.tensiorr.budgetapp.data.preferences.UserPreferences
-import com.tensiorr.budgetapp.ui.AddTransactionScreen
-import com.tensiorr.budgetapp.ui.DateFormatOption
-import com.tensiorr.budgetapp.ui.DateFormatSelectionScreen
-import com.tensiorr.budgetapp.ui.ManageCategoriesScreen
-import com.tensiorr.budgetapp.ui.SavingsScreen
-import com.tensiorr.budgetapp.ui.SettingsScreen
-import com.tensiorr.budgetapp.ui.StatisticsScreen
-import com.tensiorr.budgetapp.ui.SummaryScreen
-import com.tensiorr.budgetapp.ui.ThemeSelectionScreen
-import com.tensiorr.budgetapp.ui.TransactionListScreen
+import com.tensiorr.budgetapp.ui.screens.AddTransactionScreen
+import com.tensiorr.budgetapp.ui.models.DateFormatOption
+import com.tensiorr.budgetapp.ui.screens.DateFormatSelectionScreen
+import com.tensiorr.budgetapp.ui.screens.ManageCategoriesScreen
+import com.tensiorr.budgetapp.ui.screens.SavingsScreen
+import com.tensiorr.budgetapp.ui.screens.SettingsScreen
+import com.tensiorr.budgetapp.ui.screens.StatisticsScreen
+import com.tensiorr.budgetapp.ui.screens.SummaryScreen
+import com.tensiorr.budgetapp.ui.screens.ThemeSelectionScreen
+import com.tensiorr.budgetapp.ui.screens.TransactionListScreen
 import com.tensiorr.budgetapp.ui.theme.BudgetAppTheme
 import com.tensiorr.budgetapp.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-
+/**
+ * Main activity for the Budget App.
+ *
+ * Handles:
+ * - Splash screen during app initialization
+ * - Theme management
+ * - Navigation between screens
+ * - Database initialization
+ */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
@@ -84,6 +92,18 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Main navigation composable for the Budget App.
+ *
+ * Manages:
+ * - Tab navigation (Lista, Bilans, Dodaj, Skarbonki, Ustawienia)
+ * - Sub-screen navigation (settings, statistics, etc.)
+ * - Transaction editing state
+ * - Savings goal management
+ *
+ * @param db Database instance
+ * @param preferences User preferences instance
+ */
 @Composable
 fun BudgetAppNavigation(
     db: AppDatabase,
@@ -113,7 +133,14 @@ fun BudgetAppNavigation(
         .collectAsState(initial = "SYSTEM")
     val currentDateFormatString by preferences.dateFormatFlow
         .collectAsState(initial = "DD.MM.YYYY")
+
     val dateFormat = DateFormatOption.fromPattern(currentDateFormatString)
+
+    val activeSavingsGoals by savingsGoalDao.getActiveGoals()
+        .collectAsState(initial = emptyList())
+
+    val archivedSavingsGoals by savingsGoalDao.getArchivedGoals()
+        .collectAsState(initial = emptyList())
 
     val themeDisplayText = when (currentThemeMode) {
         "LIGHT" -> "Jasny"
@@ -130,6 +157,16 @@ fun BudgetAppNavigation(
         showDateFormatSelection = false
         showSavings = false
         selectedTab = tab
+    }
+
+    fun navigateToSettings() {
+        transactionToEdit = null
+        showManageCategories = false
+        showThemeSelection = false
+        showStatistics = false
+        showDateFormatSelection = false
+        showSavings = false
+        selectedTab = 4
     }
 
     Scaffold(
@@ -173,10 +210,11 @@ fun BudgetAppNavigation(
                 showDateFormatSelection -> {
                     BackHandler {
                         showDateFormatSelection = false
-                        selectedTab = 3
+                        navigateToSettings()
                     }
                     DateFormatSelectionScreen(
                         preferences = preferences,
+                        currentDateFormat = currentDateFormatString,
                         onNavigateBack = {
                             showDateFormatSelection = false
                         }
@@ -185,7 +223,7 @@ fun BudgetAppNavigation(
                 showManageCategories -> {
                     BackHandler {
                         showManageCategories = false
-                        selectedTab = 3
+                        navigateToSettings()
                     }
                     ManageCategoriesScreen(
                         categoryDao = categoryDao,
@@ -200,10 +238,11 @@ fun BudgetAppNavigation(
                 showThemeSelection -> {
                     BackHandler {
                         showThemeSelection = false
-                        selectedTab = 3
+                        navigateToSettings()
                     }
                     ThemeSelectionScreen(
                         preferences = preferences,
+                        currentThemeMode = currentThemeMode,
                         onNavigateBack = {
                             showThemeSelection = false
                         }
@@ -212,7 +251,7 @@ fun BudgetAppNavigation(
                 showStatistics -> {
                     BackHandler {
                         showStatistics = false
-                        selectedTab = 3
+                        navigateToSettings()
                     }
                     StatisticsScreen(
                         transactionDao = dao,
@@ -231,6 +270,8 @@ fun BudgetAppNavigation(
                     SavingsScreen(
                         savingsGoalDao = savingsGoalDao,
                         dateFormat = dateFormat,
+                        activeGoals = activeSavingsGoals,
+                        archivedGoals = archivedSavingsGoals,
                         onNavigateBack = {
                             showSavings = false
                         }
@@ -341,7 +382,9 @@ fun BudgetAppNavigation(
                     }
                     SavingsScreen(
                         savingsGoalDao = savingsGoalDao,
-                        dateFormat = dateFormat
+                        dateFormat = dateFormat,
+                        activeGoals = activeSavingsGoals,
+                        archivedGoals = archivedSavingsGoals,
                     )
                 }
                 selectedTab == 4 -> {

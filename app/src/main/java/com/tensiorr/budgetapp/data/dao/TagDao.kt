@@ -6,6 +6,12 @@ import com.tensiorr.budgetapp.data.entity.TransactionTagCrossRef
 import com.tensiorr.budgetapp.data.entity.TransactionType
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * Data Access Object for tags.
+ *
+ * Manages tags, their relationships with categories and transactions,
+ * including many-to-many cross-reference operations.
+ */
 @Dao
 interface TagDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)

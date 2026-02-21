@@ -1,4 +1,4 @@
-package com.tensiorr.budgetapp.ui
+package com.tensiorr.budgetapp.ui.models
 
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter

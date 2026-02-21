@@ -1,4 +1,4 @@
-package com.tensiorr.budgetapp.ui
+package com.tensiorr.budgetapp.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -12,7 +12,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tensiorr.budgetapp.data.preferences.UserPreferences
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -26,12 +25,10 @@ import kotlinx.coroutines.launch
 @Composable
 fun ThemeSelectionScreen(
     preferences: UserPreferences,
+    currentThemeMode: String,
     onNavigateBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
-
-    val currentThemeMode by preferences.themeModeFlow
-        .collectAsState(initial = "SYSTEM")
 
     Column(
         modifier = Modifier
@@ -62,7 +59,6 @@ fun ThemeSelectionScreen(
                     isSelected = currentThemeMode == "LIGHT",
                     onClick = {
                         scope.launch {
-                            delay(100)
                             preferences.setThemeMode("LIGHT")
                         }
                     }
@@ -76,7 +72,6 @@ fun ThemeSelectionScreen(
                     isSelected = currentThemeMode == "DARK",
                     onClick = {
                         scope.launch {
-                            delay(100)
                             preferences.setThemeMode("DARK")
                         }
                     }
@@ -90,7 +85,6 @@ fun ThemeSelectionScreen(
                     isSelected = currentThemeMode == "SYSTEM",
                     onClick = {
                         scope.launch {
-                            delay(100)
                             preferences.setThemeMode("SYSTEM")
                         }
                     }

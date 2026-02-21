@@ -3,7 +3,11 @@ package com.tensiorr.budgetapp.data.database
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-
+/**
+ * Database schema migrations.
+ *
+ * Contains migration strategies for database version updates.
+ */
 object DatabaseMigrations {
     val MIGRATION_3_4 = object : Migration(3, 4) {
         override fun migrate(database: SupportSQLiteDatabase) {

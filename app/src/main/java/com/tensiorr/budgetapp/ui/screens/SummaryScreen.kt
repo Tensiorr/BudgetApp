@@ -1,4 +1,4 @@
-package com.tensiorr.budgetapp.ui
+package com.tensiorr.budgetapp.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,14 +19,20 @@ import com.tensiorr.budgetapp.data.entity.Tag
 import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionType
 import com.tensiorr.budgetapp.data.entity.TransactionWithTags
+import com.tensiorr.budgetapp.ui.dialogs.CustomDateRangeDialog
+import com.tensiorr.budgetapp.ui.models.DateFormatOption
 import com.tensiorr.budgetapp.ui.theme.Green
 import com.tensiorr.budgetapp.ui.theme.Red
 import com.tensiorr.budgetapp.ui.theme.Yellow
+import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+/**
+ * Capitalizes the first character of a string.
+ */
 fun String.capitalize(): String = replaceFirstChar {
     if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
 }
@@ -36,6 +42,12 @@ sealed class DateRangeType {
     data class Custom(val startDate: LocalDate, val endDate: LocalDate) : DateRangeType()
 }
 
+/**
+ * Gets available months from transaction history.
+ *
+ * @param transactions List of transactions
+ * @return List of YearMonth sorted in descending order
+ */
 fun getAvailableMonths(transactions: List<Transaction>): List<YearMonth> {
     if (transactions.isEmpty()) return listOf(YearMonth.now())
     val months = transactions.map { YearMonth.from(it.date) }.distinct().sorted()
@@ -331,6 +343,14 @@ fun SummaryCards(
     }
 }
 
+/**
+ * Formats amount in cents to Polish currency format.
+ *
+ * Example: 123456 cents → "1 234,56"
+ *
+ * @param cents Amount in cents
+ * @return Formatted string with Polish number formatting
+ */
 fun formatAmount(cents: Int): String {
     return String.format("%,.2f", cents / 100.0).replace(',', ' ').replace('.', ',')
 }
@@ -644,7 +664,7 @@ fun SavingsBreakdown(
             .mapNotNull { it.transaction.savingsGoalId }
             .distinct()
 
-        kotlinx.coroutines.runBlocking {
+        runBlocking {
             goalIds.forEach { goalId ->
                 cache[goalId] = savingsGoalDao.getById(goalId)
             }

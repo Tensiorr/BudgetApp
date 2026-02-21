@@ -12,7 +12,12 @@ import kotlinx.coroutines.flow.map
 
 /**
  * User preferences storage using DataStore.
- * Stores theme mode, language, and default currency.
+ *
+ * Stores:
+ * - Theme mode (LIGHT, DARK, SYSTEM)
+ * - Language preference
+ * - Default currency
+ * - Date format preference
  */
 class UserPreferences(private val context: Context) {
 

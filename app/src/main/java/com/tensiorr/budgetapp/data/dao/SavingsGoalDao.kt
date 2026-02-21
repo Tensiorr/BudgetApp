@@ -4,6 +4,12 @@ import androidx.room.*
 import com.tensiorr.budgetapp.data.entity.SavingsGoal
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * Data Access Object for savings goals.
+ *
+ * Provides CRUD operations and queries for managing savings goals,
+ * including active/archived filtering and transaction counting.
+ */
 @Dao
 interface SavingsGoalDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)

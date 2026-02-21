@@ -1,9 +1,15 @@
-package com.tensiorr.budgetapp.ui
+package com.tensiorr.budgetapp.ui.models
 
 import java.time.LocalDate
 
 /**
  * Represents the current filter state for transaction list.
+ *
+ * @property transactionType Type of transactions to show
+ * @property categoryIds Set of category IDs to filter by
+ * @property tagIds Set of tag IDs to filter by
+ * @property savingsGoalIds Set of savings goal IDs to filter by
+ * @property dateRange Date range to filter transactions
  */
 data class FilterState(
     val transactionType: TransactionTypeFilter = TransactionTypeFilter.ALL,
@@ -33,6 +39,11 @@ data class FilterState(
 
 /**
  * Transaction type filter options.
+ *
+ * @property ALL Show all transaction types
+ * @property EXPENSE Show only expenses
+ * @property INCOME Show only income
+ * @property SAVING Show only savings
  */
 enum class TransactionTypeFilter {
     ALL,

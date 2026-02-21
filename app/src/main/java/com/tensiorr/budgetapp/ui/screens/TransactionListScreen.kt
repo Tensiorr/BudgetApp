@@ -1,4 +1,4 @@
-package com.tensiorr.budgetapp.ui
+package com.tensiorr.budgetapp.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,7 +35,13 @@ import androidx.compose.foundation.layout.FlowRow
 import com.tensiorr.budgetapp.data.dao.SavingsGoalDao
 import com.tensiorr.budgetapp.data.dao.TagDao
 import com.tensiorr.budgetapp.data.entity.SavingsGoal
+import com.tensiorr.budgetapp.ui.dialogs.CustomDateRangeDialog
+import com.tensiorr.budgetapp.ui.models.DateFormatOption
+import com.tensiorr.budgetapp.ui.models.DateRangeFilter
+import com.tensiorr.budgetapp.ui.models.FilterState
+import com.tensiorr.budgetapp.ui.models.TransactionTypeFilter
 import com.tensiorr.budgetapp.ui.theme.Yellow
+import kotlinx.coroutines.runBlocking
 
 /**
  * Screen displaying list of transactions with balance summary.
@@ -75,7 +81,7 @@ fun TransactionListScreen(
             .mapNotNull { it.transaction.savingsGoalId }
             .distinct()
 
-        kotlinx.coroutines.runBlocking {
+        runBlocking {
             goalIds.forEach { goalId ->
                 cache[goalId] = savingsGoalDao.getById(goalId)
             }

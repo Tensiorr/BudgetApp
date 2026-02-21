@@ -1,4 +1,4 @@
-package com.tensiorr.budgetapp.ui
+package com.tensiorr.budgetapp.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
@@ -15,23 +15,37 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tensiorr.budgetapp.data.dao.SavingsGoalDao
 import com.tensiorr.budgetapp.data.entity.SavingsGoal
+import com.tensiorr.budgetapp.ui.dialogs.CustomDatePickerDialog
+import com.tensiorr.budgetapp.ui.models.DateFormatOption
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
+/**
+ * Screen for managing savings goals (piggy banks).
+ *
+ * Features:
+ * - View active and archived savings goals
+ * - Create, edit, and delete goals
+ * - Archive/unarchive goals
+ * - Track progress towards targets
+ * - View deadline status
+ *
+ * @param savingsGoalDao DAO for savings goal operations
+ * @param dateFormat Current date format preference
+ * @param activeGoals List of active savings goals (preloaded)
+ * @param archivedGoals List of archived savings goals (preloaded)
+ * @param onNavigateBack Callback when navigating back
+ */
 @Composable
 fun SavingsScreen(
     savingsGoalDao: SavingsGoalDao,
     dateFormat: DateFormatOption,
+    activeGoals: List<SavingsGoal>,
+    archivedGoals: List<SavingsGoal>,
     onNavigateBack: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
-
-    val activeGoals = savingsGoalDao.getActiveGoals()
-        .collectAsState(initial = emptyList())
-
-    val archivedGoals = savingsGoalDao.getArchivedGoals()
-        .collectAsState(initial = emptyList())
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showArchivedGoals by remember { mutableStateOf(false) }
@@ -39,7 +53,7 @@ fun SavingsScreen(
     var goalToDelete by remember { mutableStateOf<SavingsGoal?>(null) }
     var goalToUnarchive by remember { mutableStateOf<SavingsGoal?>(null) }
 
-    val totalSavings = activeGoals.value.sumOf { it.currentAmount }
+    val totalSavings = activeGoals.sumOf { it.currentAmount }
 
     if (showArchivedGoals) {
         BackHandler {
@@ -81,7 +95,7 @@ fun SavingsScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            if (!showArchivedGoals && activeGoals.value.isNotEmpty()) {
+            if (!showArchivedGoals && activeGoals.isNotEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -109,9 +123,9 @@ fun SavingsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 val goalsToShow = if (showArchivedGoals) {
-                    archivedGoals.value
+                    archivedGoals
                 } else {
-                    activeGoals.value
+                    activeGoals
                 }
 
                 if (goalsToShow.isEmpty()) {

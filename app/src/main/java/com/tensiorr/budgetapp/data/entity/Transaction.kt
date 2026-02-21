@@ -6,6 +6,16 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.time.LocalDate
 
+/**
+ * Transaction entity representing a financial transaction.
+ *
+ * @property id Unique identifier
+ * @property amountInCents Amount in cents (100 = 1 PLN)
+ * @property type Transaction type (EXPENSE, INCOME, SAVING)
+ * @property date Transaction date
+ * @property comment Optional comment
+ * @property savingsGoalId Optional savings goal ID (required for SAVING type)
+ */
 @Entity(
     tableName = "transactions",
     foreignKeys = [

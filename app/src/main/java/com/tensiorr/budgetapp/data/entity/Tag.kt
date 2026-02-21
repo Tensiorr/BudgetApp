@@ -5,6 +5,14 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
+/**
+ * Tag entity for detailed transaction classification within categories.
+ *
+ * @property id Unique identifier
+ * @property name Tag name
+ * @property transactionType Type of transactions this tag applies to
+ * @property categoryId Parent category ID
+ */
 @Entity(
     tableName = "tags",
     foreignKeys = [

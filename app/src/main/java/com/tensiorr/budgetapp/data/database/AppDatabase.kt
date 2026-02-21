@@ -16,6 +16,18 @@ import com.tensiorr.budgetapp.data.entity.TransactionTagCrossRef
 import com.tensiorr.budgetapp.data.entity.Category
 import com.tensiorr.budgetapp.data.entity.SavingsGoal
 
+/**
+ * Main Room database for the Budget App.
+ *
+ * Version 5: Added savings_goals table and savingsGoalId to transactions.
+ *
+ * Entities:
+ * - Transaction: Financial transactions
+ * - Tag: Transaction tags
+ * - TransactionTagCrossRef: Many-to-many relation
+ * - Category: Transaction categories
+ * - SavingsGoal: Savings goals (piggy banks)
+ */
 @Database(
     entities = [
         Transaction::class,
