@@ -6,7 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -14,11 +14,14 @@ import androidx.compose.ui.unit.dp
 import com.tensiorr.budgetapp.BuildConfig
 
 /**
- * Main settings screen with menu of configuration options.
+ * Main settings screen with configuration options.
  *
- * Available options:
+ * Available settings:
  * - Manage categories and tags
- * - Theme selection
+ * - Theme selection (light/dark/system)
+ * - Statistics view
+ * - Date format selection
+ * - Check for app updates
  */
 @Composable
 fun SettingsScreen(
@@ -26,6 +29,7 @@ fun SettingsScreen(
     onNavigateToTheme: () -> Unit,
     onNavigateToStatistics: () -> Unit,
     onNavigateToDateFormat: () -> Unit,
+    onCheckForUpdates: () -> Unit,
     themeDisplayText: String,
     dateFormatDisplayText: String
 ) {
@@ -85,11 +89,10 @@ fun SettingsScreen(
 
             item {
                 SettingsMenuItem(
-                    icon = Icons.Default.Info,
-                    title = "O aplikacji",
+                    icon = Icons.Default.SystemUpdate,
+                    title = "Sprawdź aktualizacje",
                     subtitle = "Wersja ${BuildConfig.VERSION_NAME}",
-                    onClick = { },
-                    enabled = false
+                    onClick = onCheckForUpdates
                 )
             }
         }
@@ -97,11 +100,17 @@ fun SettingsScreen(
 }
 
 /**
- * Clickable settings menu item.
+ * Clickable settings menu item with icon, title, and subtitle.
+ *
+ * @param icon Leading icon (optional)
+ * @param title Main text
+ * @param subtitle Secondary text
+ * @param onClick Action when clicked
+ * @param enabled Whether item is clickable
  */
 @Composable
-fun SettingsMenuItem(
-    icon: ImageVector,
+private fun SettingsMenuItem(
+    icon: ImageVector? = null,
     title: String,
     subtitle: String,
     onClick: () -> Unit,
@@ -123,16 +132,19 @@ fun SettingsMenuItem(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = if (enabled) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
+                if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = if (enabled) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+
                 Column {
                     Text(
                         text = title,
@@ -150,6 +162,7 @@ fun SettingsMenuItem(
                     )
                 }
             }
+
             if (enabled) {
                 Icon(
                     Icons.Default.ChevronRight,

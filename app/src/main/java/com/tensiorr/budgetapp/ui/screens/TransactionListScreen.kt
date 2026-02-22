@@ -840,7 +840,7 @@ fun FilterDialog(
 
                             if (activeSavingsGoals.value.isEmpty()) {
                                 Text(
-                                    text = "Brak aktywnych skarboniek",
+                                    text = "Brak aktywnych skarbonek",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

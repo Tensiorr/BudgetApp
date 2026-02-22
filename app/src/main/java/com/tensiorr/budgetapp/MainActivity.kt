@@ -1,80 +1,84 @@
 package com.tensiorr.budgetapp
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.Modifier
-import androidx.compose.runtime.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.Savings
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Text
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.tensiorr.budgetapp.data.database.AppDatabase
 import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionTagCrossRef
 import com.tensiorr.budgetapp.data.entity.TransactionType
 import com.tensiorr.budgetapp.data.preferences.UserPreferences
-import com.tensiorr.budgetapp.ui.screens.AddTransactionScreen
+import com.tensiorr.budgetapp.ui.dialogs.UpdateDialog
 import com.tensiorr.budgetapp.ui.models.DateFormatOption
-import com.tensiorr.budgetapp.ui.screens.DateFormatSelectionScreen
-import com.tensiorr.budgetapp.ui.screens.ManageCategoriesScreen
-import com.tensiorr.budgetapp.ui.screens.SavingsScreen
-import com.tensiorr.budgetapp.ui.screens.SettingsScreen
-import com.tensiorr.budgetapp.ui.screens.StatisticsScreen
-import com.tensiorr.budgetapp.ui.screens.SummaryScreen
-import com.tensiorr.budgetapp.ui.screens.ThemeSelectionScreen
-import com.tensiorr.budgetapp.ui.screens.TransactionListScreen
+import com.tensiorr.budgetapp.ui.screens.*
 import com.tensiorr.budgetapp.ui.theme.BudgetAppTheme
 import com.tensiorr.budgetapp.ui.theme.ThemeMode
+import com.tensiorr.budgetapp.ui.viewmodel.UpdateUiState
+import com.tensiorr.budgetapp.ui.viewmodel.UpdateViewModel
+import com.tensiorr.budgetapp.util.ApkInstaller
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * Main activity for the Budget App.
  *
- * Handles:
- * - Splash screen during app initialization
- * - Theme management
+ * Manages:
+ * - Splash screen during initialization
+ * - Theme configuration
  * - Navigation between screens
- * - Database initialization
+ * - App update flow
  */
 class MainActivity : ComponentActivity() {
+
+    private var pendingApkInstall: File? = null
+
+    private val installSettingsLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { _ ->
+        pendingApkInstall?.let { apkFile ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (packageManager.canRequestPackageInstalls()) {
+                    ApkInstaller.installApk(this, apkFile)
+                    pendingApkInstall = null
+                }
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         val db = AppDatabase.getDatabase(this)
         val preferences = UserPreferences(this)
 
         var isReady = false
-        var initialThemeMode = ThemeMode.SYSTEM
 
         splashScreen.setKeepOnScreenCondition { !isReady }
 
         lifecycleScope.launch {
-            preferences.themeModeFlow.first().let { mode ->
-                initialThemeMode = try {
-                    ThemeMode.valueOf(mode)
-                } catch (e: Exception) {
-                    ThemeMode.SYSTEM
-                }
-            }
+            preferences.themeModeFlow.first()
             db.transactionDao().getAllTransactionsWithTags().first()
             db.categoryDao().getAllCategories().first()
-
             isReady = true
         }
 
@@ -82,32 +86,74 @@ class MainActivity : ComponentActivity() {
             val themeMode by preferences.themeModeEnumFlow
                 .collectAsState(initial = ThemeMode.SYSTEM)
 
+            val updateViewModel: UpdateViewModel = viewModel()
+            val updateUiState by updateViewModel.uiState.collectAsState()
+
+            LaunchedEffect(updateUiState) {
+                if (updateUiState is UpdateUiState.NeedsInstallPermission) {
+                    pendingApkInstall = (updateUiState as UpdateUiState.NeedsInstallPermission).apkFile
+                }
+            }
+
             BudgetAppTheme(themeMode = themeMode) {
                 BudgetAppNavigation(
                     db = db,
-                    preferences = preferences
+                    preferences = preferences,
+                    updateViewModel = updateViewModel
                 )
+
+                UpdateDialog(
+                    uiState = updateUiState,
+                    onDownload = {
+                        if (updateUiState is UpdateUiState.UpdateAvailable) {
+                            updateViewModel.downloadAndInstall(
+                                (updateUiState as UpdateUiState.UpdateAvailable).update
+                            )
+                        }
+                    },
+                    onInstall = {
+                        if (updateUiState is UpdateUiState.ReadyToInstall) {
+                            updateViewModel.installApk(
+                                (updateUiState as UpdateUiState.ReadyToInstall).apkFile
+                            )
+                        }
+                    },
+                    onDismiss = {
+                        when (updateUiState) {
+                            is UpdateUiState.UpdateAvailable -> {
+                                updateViewModel.dismissUpdate(
+                                    (updateUiState as UpdateUiState.UpdateAvailable).update
+                                )
+                            }
+                            else -> updateViewModel.resetState()
+                        }
+                    },
+                    onRequestInstallPermission = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                                data = Uri.parse("package:$packageName")
+                            }
+                            installSettingsLauncher.launch(intent)
+                        }
+                    }
+                )
+            }
+
+            LaunchedEffect(Unit) {
+                updateViewModel.checkForUpdateSilently()
             }
         }
     }
 }
 
 /**
- * Main navigation composable for the Budget App.
- *
- * Manages:
- * - Tab navigation (Lista, Bilans, Dodaj, Skarbonki, Ustawienia)
- * - Sub-screen navigation (settings, statistics, etc.)
- * - Transaction editing state
- * - Savings goal management
- *
- * @param db Database instance
- * @param preferences User preferences instance
+ * Main navigation composable managing tab navigation and sub-screens.
  */
 @Composable
 fun BudgetAppNavigation(
     db: AppDatabase,
-    preferences: UserPreferences
+    preferences: UserPreferences,
+    updateViewModel: UpdateViewModel
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var transactionToEdit by remember { mutableStateOf<Pair<Transaction, Long?>?>(null) }
@@ -123,22 +169,18 @@ fun BudgetAppNavigation(
     val savingsGoalDao = db.savingsGoalDao()
 
     val scope = rememberCoroutineScope()
+
     val transactionsWithTags = dao.getAllTransactionsWithTags()
         .collectAsState(initial = emptyList())
-
     val categories = categoryDao.getAllCategories()
         .collectAsState(initial = emptyList())
-
     val currentThemeMode by preferences.themeModeFlow
         .collectAsState(initial = "SYSTEM")
     val currentDateFormatString by preferences.dateFormatFlow
         .collectAsState(initial = "DD.MM.YYYY")
-
     val dateFormat = DateFormatOption.fromPattern(currentDateFormatString)
-
     val activeSavingsGoals by savingsGoalDao.getActiveGoals()
         .collectAsState(initial = emptyList())
-
     val archivedSavingsGoals by savingsGoalDao.getArchivedGoals()
         .collectAsState(initial = emptyList())
 
@@ -215,11 +257,10 @@ fun BudgetAppNavigation(
                     DateFormatSelectionScreen(
                         preferences = preferences,
                         currentDateFormat = currentDateFormatString,
-                        onNavigateBack = {
-                            showDateFormatSelection = false
-                        }
+                        onNavigateBack = { showDateFormatSelection = false }
                     )
                 }
+
                 showManageCategories -> {
                     BackHandler {
                         showManageCategories = false
@@ -230,11 +271,10 @@ fun BudgetAppNavigation(
                         tagDao = tagDao,
                         transactionDao = dao,
                         categories = categories.value,
-                        onNavigateBack = {
-                            showManageCategories = false
-                        }
+                        onNavigateBack = { showManageCategories = false }
                     )
                 }
+
                 showThemeSelection -> {
                     BackHandler {
                         showThemeSelection = false
@@ -243,11 +283,10 @@ fun BudgetAppNavigation(
                     ThemeSelectionScreen(
                         preferences = preferences,
                         currentThemeMode = currentThemeMode,
-                        onNavigateBack = {
-                            showThemeSelection = false
-                        }
+                        onNavigateBack = { showThemeSelection = false }
                     )
                 }
+
                 showStatistics -> {
                     BackHandler {
                         showStatistics = false
@@ -257,11 +296,10 @@ fun BudgetAppNavigation(
                         transactionDao = dao,
                         categoryDao = categoryDao,
                         tagDao = tagDao,
-                        onNavigateBack = {
-                            showStatistics = false
-                        }
+                        onNavigateBack = { showStatistics = false }
                     )
                 }
+
                 showSavings -> {
                     BackHandler {
                         showSavings = false
@@ -272,17 +310,15 @@ fun BudgetAppNavigation(
                         dateFormat = dateFormat,
                         activeGoals = activeSavingsGoals,
                         archivedGoals = archivedSavingsGoals,
-                        onNavigateBack = {
-                            showSavings = false
-                        }
+                        onNavigateBack = { showSavings = false }
                     )
                 }
+
                 transactionToEdit != null -> {
                     BackHandler {
                         transactionToEdit = null
                         selectedTab = 0
                     }
-                    val scope = rememberCoroutineScope()
                     AddTransactionScreen(
                         categoryDao = categoryDao,
                         tagDao = tagDao,
@@ -294,14 +330,22 @@ fun BudgetAppNavigation(
                             scope.launch {
                                 val oldTransaction = transactionToEdit!!.first
 
-                                if (oldTransaction.type == TransactionType.SAVING && oldTransaction.savingsGoalId != null) {
-                                    savingsGoalDao.addToGoal(oldTransaction.savingsGoalId!!, -oldTransaction.amountInCents)
+                                if (oldTransaction.type == TransactionType.SAVING &&
+                                    oldTransaction.savingsGoalId != null) {
+                                    savingsGoalDao.addToGoal(
+                                        oldTransaction.savingsGoalId!!,
+                                        -oldTransaction.amountInCents
+                                    )
                                 }
 
                                 dao.update(transaction)
 
-                                if (transaction.type == TransactionType.SAVING && transaction.savingsGoalId != null) {
-                                    savingsGoalDao.addToGoal(transaction.savingsGoalId!!, transaction.amountInCents)
+                                if (transaction.type == TransactionType.SAVING &&
+                                    transaction.savingsGoalId != null) {
+                                    savingsGoalDao.addToGoal(
+                                        transaction.savingsGoalId!!,
+                                        transaction.amountInCents
+                                    )
                                 }
 
                                 tagDao.deleteTransactionTagCrossRefsForTransaction(transaction.id)
@@ -310,12 +354,14 @@ fun BudgetAppNavigation(
                                         TransactionTagCrossRef(transaction.id, id)
                                     )
                                 }
+
                                 transactionToEdit = null
                                 selectedTab = 0
                             }
                         }
                     )
                 }
+
                 selectedTab == 0 -> {
                     TransactionListScreen(
                         transactionsWithTags = transactionsWithTags.value,
@@ -325,10 +371,13 @@ fun BudgetAppNavigation(
                         dateFormat = dateFormat,
                         onDelete = { transaction ->
                             scope.launch {
-                                if (transaction.type == TransactionType.SAVING && transaction.savingsGoalId != null) {
-                                    savingsGoalDao.addToGoal(transaction.savingsGoalId!!, -transaction.amountInCents)
+                                if (transaction.type == TransactionType.SAVING &&
+                                    transaction.savingsGoalId != null) {
+                                    savingsGoalDao.addToGoal(
+                                        transaction.savingsGoalId!!,
+                                        -transaction.amountInCents
+                                    )
                                 }
-
                                 dao.delete(transaction)
                             }
                         },
@@ -337,10 +386,9 @@ fun BudgetAppNavigation(
                         }
                     )
                 }
+
                 selectedTab == 1 -> {
-                    BackHandler {
-                        navigateToTab(0)
-                    }
+                    BackHandler { navigateToTab(0) }
                     SummaryScreen(
                         transactions = transactionsWithTags.value,
                         categories = categories.value,
@@ -348,11 +396,9 @@ fun BudgetAppNavigation(
                         dateFormat = dateFormat
                     )
                 }
+
                 selectedTab == 2 -> {
-                    BackHandler {
-                        navigateToTab(0)
-                    }
-                    val scope = rememberCoroutineScope()
+                    BackHandler { navigateToTab(0) }
                     AddTransactionScreen(
                         categoryDao = categoryDao,
                         tagDao = tagDao,
@@ -362,8 +408,12 @@ fun BudgetAppNavigation(
                             scope.launch {
                                 val transactionId = dao.insert(transaction)
 
-                                if (transaction.type == TransactionType.SAVING && transaction.savingsGoalId != null) {
-                                    savingsGoalDao.addToGoal(transaction.savingsGoalId!!, transaction.amountInCents)
+                                if (transaction.type == TransactionType.SAVING &&
+                                    transaction.savingsGoalId != null) {
+                                    savingsGoalDao.addToGoal(
+                                        transaction.savingsGoalId!!,
+                                        transaction.amountInCents
+                                    )
                                 }
 
                                 tagId?.let { id ->
@@ -371,39 +421,31 @@ fun BudgetAppNavigation(
                                         TransactionTagCrossRef(transactionId, id)
                                     )
                                 }
+
                                 navigateToTab(0)
                             }
                         }
                     )
                 }
+
                 selectedTab == 3 -> {
-                    BackHandler {
-                        navigateToTab(0)
-                    }
+                    BackHandler { navigateToTab(0) }
                     SavingsScreen(
                         savingsGoalDao = savingsGoalDao,
                         dateFormat = dateFormat,
                         activeGoals = activeSavingsGoals,
-                        archivedGoals = archivedSavingsGoals,
+                        archivedGoals = archivedSavingsGoals
                     )
                 }
+
                 selectedTab == 4 -> {
-                    BackHandler {
-                        navigateToTab(0)
-                    }
+                    BackHandler { navigateToTab(0) }
                     SettingsScreen(
-                        onNavigateToCategories = {
-                            showManageCategories = true
-                        },
-                        onNavigateToTheme = {
-                            showThemeSelection = true
-                        },
-                        onNavigateToStatistics = {
-                            showStatistics = true
-                        },
-                        onNavigateToDateFormat = {
-                            showDateFormatSelection = true
-                        },
+                        onNavigateToCategories = { showManageCategories = true },
+                        onNavigateToTheme = { showThemeSelection = true },
+                        onNavigateToStatistics = { showStatistics = true },
+                        onNavigateToDateFormat = { showDateFormatSelection = true },
+                        onCheckForUpdates = { updateViewModel.checkForUpdate() },
                         themeDisplayText = themeDisplayText,
                         dateFormatDisplayText = currentDateFormatString
                     )
