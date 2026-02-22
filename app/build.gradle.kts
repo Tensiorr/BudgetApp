@@ -15,8 +15,8 @@ android {
         applicationId = "com.tensiorr.budgetapp"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.3.1"
+        versionCode = 400 // (major*10000) + (minor*100) + patch
+        versionName = "0.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
