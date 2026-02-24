@@ -1,6 +1,7 @@
 package com.tensiorr.budgetapp.data.database
 
 import android.content.Context
+import android.util.Log
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -15,19 +16,9 @@ import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionTagCrossRef
 import com.tensiorr.budgetapp.data.entity.Category
 import com.tensiorr.budgetapp.data.entity.SavingsGoal
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-/**
- * Main Room database for the Budget App.
- *
- * Version 5: Added savings_goals table and savingsGoalId to transactions.
- *
- * Entities:
- * - Transaction: Financial transactions
- * - Tag: Transaction tags
- * - TransactionTagCrossRef: Many-to-many relation
- * - Category: Transaction categories
- * - SavingsGoal: Savings goals (piggy banks)
- */
 @Database(
     entities = [
         Transaction::class,
@@ -36,7 +27,7 @@ import com.tensiorr.budgetapp.data.entity.SavingsGoal
         Category::class,
         SavingsGoal::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -48,6 +39,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun savingsGoalDao(): SavingsGoalDao
 
     companion object {
+        private const val TAG = "AppDatabase"
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -60,11 +53,26 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                     .addMigrations(
                         DatabaseMigrations.MIGRATION_3_4,
-                        DatabaseMigrations.MIGRATION_4_5
+                        DatabaseMigrations.MIGRATION_4_5,
+                        DatabaseMigrations.MIGRATION_5_6,
                     )
                     .build()
                 INSTANCE = instance
                 instance
+            }
+        }
+
+        /**
+         * Clear all data from database.
+         */
+        suspend fun clearAllData(context: Context) {
+            val db = getDatabase(context)
+            withContext(Dispatchers.IO) {
+                try {
+                    db.clearAllTables()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to clear database", e)
+                }
             }
         }
     }

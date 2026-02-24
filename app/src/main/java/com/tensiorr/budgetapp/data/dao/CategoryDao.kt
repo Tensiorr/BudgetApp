@@ -25,9 +25,6 @@ interface CategoryDao {
     @Query("SELECT * FROM categories ORDER BY name ASC")
     fun getAllCategories(): Flow<List<Category>>
 
-    @Update
-    suspend fun update(category: Category)
-
     @Query("""
     SELECT COUNT(*) FROM transactions 
     WHERE id IN (
@@ -41,6 +38,24 @@ interface CategoryDao {
 
     @Query("SELECT COUNT(*) FROM categories")
     suspend fun getCategoryCount(): Int
+
+    @Query("SELECT * FROM categories WHERE updatedAt > :timestamp")
+    suspend fun getChangedSince(timestamp: Long): List<Category>
+
+    @Query("SELECT * FROM categories")
+    suspend fun getAllCategoriesOnce(): List<Category>
+
+    @Update
+    suspend fun update(category: Category)
+
+    @Transaction
+    suspend fun deleteCategoryWithTags(category: Category) {
+        deleteTagsForCategory(category.id)
+        delete(category)
+    }
+
+    @Query("DELETE FROM tags WHERE categoryId = :categoryId")
+    suspend fun deleteTagsForCategory(categoryId: Long)
 
     @Delete
     suspend fun delete(category: Category)

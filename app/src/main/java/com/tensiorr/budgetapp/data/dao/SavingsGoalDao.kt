@@ -42,6 +42,12 @@ interface SavingsGoalDao {
     @Query("SELECT COUNT(*) FROM transactions WHERE savingsGoalId = :goalId")
     suspend fun getTransactionCount(goalId: Long): Int
 
+    @Query("SELECT * FROM savings_goals WHERE updatedAt > :timestamp")
+    suspend fun getChangedSince(timestamp: Long): List<SavingsGoal>
+
+    @Query("SELECT * FROM savings_goals")
+    suspend fun getAllGoalsOnce(): List<SavingsGoal>
+
     @Update
     suspend fun update(savingsGoal: SavingsGoal)
 

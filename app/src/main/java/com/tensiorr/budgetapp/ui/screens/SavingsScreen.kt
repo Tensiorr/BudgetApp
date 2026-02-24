@@ -18,11 +18,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tensiorr.budgetapp.data.dao.SavingsGoalDao
 import com.tensiorr.budgetapp.data.entity.SavingsGoal
+import com.tensiorr.budgetapp.data.repository.SyncRepository
 import com.tensiorr.budgetapp.ui.dialogs.CustomDatePickerDialog
 import com.tensiorr.budgetapp.ui.models.DateFormatOption
+import com.tensiorr.budgetapp.ui.viewmodel.AuthViewModel
+import com.tensiorr.budgetapp.util.AuthState
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import androidx.compose.ui.platform.LocalContext
+import com.tensiorr.budgetapp.util.SyncManager
 
 /**
  * Screen for managing savings goals (piggy banks).
@@ -46,9 +51,13 @@ fun SavingsScreen(
     dateFormat: DateFormatOption,
     activeGoals: List<SavingsGoal>,
     archivedGoals: List<SavingsGoal>,
-    onNavigateBack: () -> Unit = {}
+    onNavigateBack: () -> Unit = {},
+    syncRepository: SyncRepository? = null,
+    authViewModel: AuthViewModel? = null,
+    isGuestMode: Boolean = false
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showArchivedGoals by remember { mutableStateOf(false) }
@@ -164,7 +173,8 @@ fun SavingsScreen(
                             }
                         },
                         onUnarchive = { goalToUnarchive = goal },
-                        onDelete = { goalToDelete = goal }
+                        onDelete = { goalToDelete = goal },
+                        isGuestMode = isGuestMode
                     )
                 }
             }
@@ -194,10 +204,14 @@ fun SavingsScreen(
                         SavingsGoal(
                             name = name,
                             targetAmount = targetAmount,
-                            deadline = deadline,
-                            createdAt = LocalDate.now()
+                            deadline = deadline
                         )
                     )
+
+                    if (!isGuestMode) {
+                        SyncManager.triggerImmediateSync(context)
+                    }
+
                     showAddDialog = false
                 }
             }
@@ -216,9 +230,15 @@ fun SavingsScreen(
                         goal.copy(
                             name = name,
                             targetAmount = targetAmount,
-                            deadline = deadline
+                            deadline = deadline,
+                            updatedAt = System.currentTimeMillis()
                         )
                     )
+
+                    if (!isGuestMode) {
+                        SyncManager.triggerImmediateSync(context)
+                    }
+
                     goalToEdit = null
                 }
             }
@@ -233,7 +253,16 @@ fun SavingsScreen(
             onDismiss = { goalToDelete = null },
             onConfirm = {
                 scope.launch {
-                    savingsGoalDao.delete(goal)
+                    if (!isGuestMode && syncRepository != null && authViewModel != null) {
+                        val authState = authViewModel.authState.value
+                        if (authState is AuthState.Authenticated) {
+                            syncRepository.deleteSavingsGoal(authState.userId, goal)
+                        } else {
+                            savingsGoalDao.delete(goal)
+                        }
+                    } else {
+                        savingsGoalDao.delete(goal)
+                    }
                     goalToDelete = null
                 }
             }
@@ -257,9 +286,19 @@ fun SavingsScreen(
                     }
 
                     if (newName != goal.name) {
-                        savingsGoalDao.update(goal.copy(name = newName, isArchived = false))
+                        savingsGoalDao.update(
+                            goal.copy(
+                                name = newName,
+                                isArchived = false,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                        )
                     } else {
                         savingsGoalDao.setArchived(goal.id, false)
+                    }
+
+                    if (!isGuestMode) {
+                        SyncManager.triggerImmediateSync(context)
                     }
 
                     goalToUnarchive = null
@@ -277,10 +316,12 @@ fun SavingsGoalItem(
     onEdit: () -> Unit,
     onArchive: () -> Unit,
     onUnarchive: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    isGuestMode: Boolean = false
 ) {
     var expanded by remember { mutableStateOf(false) }
     var showArchiveDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     val progressPercentage = if (goal.targetAmount > 0) {
         ((goal.currentAmount.toFloat() / goal.targetAmount) * 100).toInt()
@@ -430,6 +471,11 @@ fun SavingsGoalItem(
                 TextButton(
                     onClick = {
                         onArchive()
+
+                        if (!isGuestMode) {
+                            SyncManager.triggerImmediateSync(context)
+                        }
+
                         showArchiveDialog = false
                     }
                 ) {

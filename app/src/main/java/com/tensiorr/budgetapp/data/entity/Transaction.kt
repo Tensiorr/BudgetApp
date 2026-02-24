@@ -35,5 +35,7 @@ data class Transaction(
     val type: TransactionType,
     val date: LocalDate,
     val comment: String?,
-    val savingsGoalId: Long? = null
+    val savingsGoalId: Long? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
 )

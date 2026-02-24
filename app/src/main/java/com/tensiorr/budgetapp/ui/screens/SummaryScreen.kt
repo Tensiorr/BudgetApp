@@ -33,7 +33,7 @@ import java.util.Locale
 /**
  * Capitalizes the first character of a string.
  */
-fun String.capitalize(): String = replaceFirstChar {
+fun String.capitalizeFirst(): String = replaceFirstChar {
     if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
 }
 
@@ -121,7 +121,7 @@ fun DateRangeSelector(
     val displayText = when (selectedRange) {
         is DateRangeType.Month -> {
             val formatter = DateTimeFormatter.ofPattern("LLLL yyyy")
-            selectedRange.yearMonth.format(formatter).capitalize()
+            selectedRange.yearMonth.format(formatter).capitalizeFirst()
         }
         is DateRangeType.Custom -> {
             "${dateFormat.format(selectedRange.startDate)} - ${dateFormat.format(selectedRange.endDate)}"
@@ -150,7 +150,7 @@ fun DateRangeSelector(
             availableMonths.forEach { month ->
                 val formatter = DateTimeFormatter.ofPattern("LLLL yyyy")
                 DropdownMenuItem(
-                    text = { Text(month.format(formatter).capitalize()) },
+                    text = { Text(month.format(formatter).capitalizeFirst()) },
                     onClick = {
                         onRangeChange(DateRangeType.Month(month))
                         expanded = false

@@ -13,11 +13,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tensiorr.budgetapp.data.dao.CategoryDao
 import com.tensiorr.budgetapp.data.dao.TagDao
-import com.tensiorr.budgetapp.data.dao.TransactionDao
 import com.tensiorr.budgetapp.data.entity.Category
 import com.tensiorr.budgetapp.data.entity.Tag
 import com.tensiorr.budgetapp.data.entity.TransactionType
+import com.tensiorr.budgetapp.data.repository.SyncRepository
+import com.tensiorr.budgetapp.ui.viewmodel.AuthViewModel
+import com.tensiorr.budgetapp.util.AuthState
 import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import com.tensiorr.budgetapp.util.SyncManager
+import kotlinx.coroutines.flow.first
 
 /**
  * Settings screen for managing categories and tags.
@@ -32,11 +37,14 @@ import kotlinx.coroutines.launch
 fun ManageCategoriesScreen(
     categoryDao: CategoryDao,
     tagDao: TagDao,
-    transactionDao: TransactionDao,
     categories: List<Category>,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    syncRepository: SyncRepository? = null,
+    authViewModel: AuthViewModel? = null,
+    isGuestMode: Boolean = false
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     val expenseCategories = remember(categories) {
         categories.filter { it.transactionType == TransactionType.EXPENSE }
@@ -162,6 +170,11 @@ fun ManageCategoriesScreen(
                                 transactionType = category.transactionType
                             )
                         )
+
+                        if (!isGuestMode) {
+                            SyncManager.triggerImmediateSync(context)
+                        }
+
                         showEditCategoryDialog = null
                     }
                 }
@@ -172,7 +185,17 @@ fun ManageCategoriesScreen(
                 onDismiss = { showEditCategoryDialog = null },
                 onConfirm = { newName ->
                     scope.launch {
-                        categoryDao.update(category.copy(name = newName.trim()))
+                        categoryDao.update(
+                            category.copy(
+                                name = newName.trim(),
+                                updatedAt = System.currentTimeMillis()
+                            )
+                        )
+
+                        if (!isGuestMode) {
+                            SyncManager.triggerImmediateSync(context)
+                        }
+
                         showEditCategoryDialog = null
                     }
                 }
@@ -187,7 +210,20 @@ fun ManageCategoriesScreen(
             onDismiss = { showDeleteCategoryDialog = null },
             onConfirm = {
                 scope.launch {
-                    categoryDao.delete(category)
+                    if (!isGuestMode && syncRepository != null && authViewModel != null) {
+                        val authState = authViewModel.authState.value
+                        if (authState is AuthState.Authenticated) {
+                            val tags = tagDao.getTagsForCategory(category.id).first()
+                            tags.forEach { tag ->
+                                syncRepository.deleteTag(authState.userId, tag)
+                            }
+                            syncRepository.deleteCategory(authState.userId, category)
+                        } else {
+                            categoryDao.deleteCategoryWithTags(category)
+                        }
+                    } else {
+                        categoryDao.deleteCategoryWithTags(category)
+                    }
                     showDeleteCategoryDialog = null
                 }
             }
@@ -208,6 +244,11 @@ fun ManageCategoriesScreen(
                             transactionType = category.transactionType
                         )
                     )
+
+                    if (!isGuestMode) {
+                        SyncManager.triggerImmediateSync(context)
+                    }
+
                     showAddTagDialog = null
                 }
             }
@@ -220,7 +261,17 @@ fun ManageCategoriesScreen(
             onDismiss = { showEditTagDialog = null },
             onConfirm = { newName ->
                 scope.launch {
-                    tagDao.updateTag(tag.copy(name = newName.trim()))
+                    tagDao.updateTag(
+                        tag.copy(
+                            name = newName.trim(),
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+
+                    if (!isGuestMode) {
+                        SyncManager.triggerImmediateSync(context)
+                    }
+
                     showEditTagDialog = null
                 }
             }
@@ -234,12 +285,22 @@ fun ManageCategoriesScreen(
             onDismiss = { showDeleteTagDialog = null },
             onConfirm = {
                 scope.launch {
-                    tagDao.deleteTag(tag)
+                    if (!isGuestMode && syncRepository != null && authViewModel != null) {
+                        val authState = authViewModel.authState.value
+                        if (authState is AuthState.Authenticated) {
+                            syncRepository.deleteTag(authState.userId, tag)
+                        } else {
+                            tagDao.deleteTag(tag)
+                        }
+                    } else {
+                        tagDao.deleteTag(tag)
+                    }
                     showDeleteTagDialog = null
                 }
             }
         )
     }
+
     showAddCategoryDialog?.let { preselectedType ->
         AddCategoryTypeDialog(
             onDismiss = { showAddCategoryDialog = null },

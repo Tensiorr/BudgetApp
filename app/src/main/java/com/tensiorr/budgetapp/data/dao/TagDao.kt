@@ -53,8 +53,20 @@ interface TagDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertTransactionTagCrossRef(crossRef: TransactionTagCrossRef)
 
+    @Query("SELECT * FROM tags WHERE updatedAt > :timestamp")
+    suspend fun getChangedSince(timestamp: Long): List<Tag>
+
+    @Query("SELECT * FROM tags")
+    suspend fun getAllTagsOnce(): List<Tag>
+
+    @Query("SELECT * FROM transaction_tag_cross_ref")
+    suspend fun getAllTransactionTagCrossRefsOnce(): List<TransactionTagCrossRef>
+
     @Update
     suspend fun updateTag(tag: Tag)
+
+    @Query("SELECT * FROM tags WHERE categoryId = :categoryId")
+    suspend fun getTagsForCategoryOnce(categoryId: Long): List<Tag>
 
     @Delete
     suspend fun deleteTag(tag: Tag)

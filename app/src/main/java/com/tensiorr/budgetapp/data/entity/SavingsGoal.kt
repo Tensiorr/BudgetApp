@@ -24,5 +24,6 @@ data class SavingsGoal(
     val currentAmount: Int = 0,
     val deadline: LocalDate? = null,
     val isArchived: Boolean = false,
-    val createdAt: LocalDate
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
 )

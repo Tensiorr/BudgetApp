@@ -35,6 +35,12 @@ interface TransactionDao {
     @Query("SELECT MIN(date) FROM transactions")
     suspend fun getFirstTransactionDate(): LocalDate?
 
+    @Query("SELECT * FROM transactions WHERE updatedAt > :timestamp")
+    suspend fun getChangedSince(timestamp: Long): List<Transaction>
+
+    @Query("SELECT * FROM transactions")
+    suspend fun getAllTransactionsOnce(): List<Transaction>
+
     @Update
     suspend fun update(transaction: Transaction)
 

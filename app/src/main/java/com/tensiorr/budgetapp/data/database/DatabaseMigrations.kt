@@ -132,4 +132,42 @@ object DatabaseMigrations {
         """)
         }
     }
+
+    val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            val currentTime = System.currentTimeMillis()
+
+            db.execSQL("ALTER TABLE transactions ADD COLUMN createdAt INTEGER NOT NULL DEFAULT $currentTime")
+            db.execSQL("ALTER TABLE transactions ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT $currentTime")
+
+            db.execSQL("ALTER TABLE categories ADD COLUMN createdAt INTEGER NOT NULL DEFAULT $currentTime")
+            db.execSQL("ALTER TABLE categories ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT $currentTime")
+
+            db.execSQL("ALTER TABLE tags ADD COLUMN createdAt INTEGER NOT NULL DEFAULT $currentTime")
+            db.execSQL("ALTER TABLE tags ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT $currentTime")
+
+            db.execSQL("""
+            CREATE TABLE savings_goals_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                name TEXT NOT NULL,
+                targetAmount INTEGER NOT NULL,
+                currentAmount INTEGER NOT NULL DEFAULT 0,
+                deadline INTEGER,
+                isArchived INTEGER NOT NULL DEFAULT 0,
+                createdAt INTEGER NOT NULL DEFAULT $currentTime,
+                updatedAt INTEGER NOT NULL DEFAULT $currentTime
+            )
+            """)
+
+            db.execSQL("""
+            INSERT INTO savings_goals_new (id, name, targetAmount, currentAmount, deadline, isArchived, createdAt, updatedAt)
+            SELECT id, name, targetAmount, currentAmount, deadline, isArchived, $currentTime, $currentTime
+            FROM savings_goals
+            """)
+
+            db.execSQL("DROP TABLE savings_goals")
+
+            db.execSQL("ALTER TABLE savings_goals_new RENAME TO savings_goals")
+        }
+    }
 }

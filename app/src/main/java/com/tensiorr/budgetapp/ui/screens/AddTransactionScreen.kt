@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -27,6 +28,7 @@ import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionType
 import com.tensiorr.budgetapp.ui.dialogs.CustomDatePickerDialog
 import com.tensiorr.budgetapp.ui.models.DateFormatOption
+import com.tensiorr.budgetapp.util.SyncManager
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
@@ -38,8 +40,11 @@ fun AddTransactionScreen(
     transactionToEdit: Transaction? = null,
     existingTagId: Long? = null,
     dateFormat: DateFormatOption,
-    onSave: (Transaction, Long?) -> Unit
+    onSave: (Transaction, Long?) -> Unit,
+    isGuestMode: Boolean = false
 ) {
+    val context = LocalContext.current
+
     var amountText by remember {
         mutableStateOf(
             transactionToEdit?.let { (it.amountInCents / 100.0).toString() } ?: ""
@@ -260,7 +265,9 @@ fun AddTransactionScreen(
                                 selectedSavingsGoalId
                             } else {
                                 null
-                            }
+                            },
+                            createdAt = transactionToEdit?.createdAt ?: System.currentTimeMillis(),
+                            updatedAt = System.currentTimeMillis()
                         )
 
                         val tagIdToSave = if (transactionType == TransactionType.SAVING) {
@@ -348,11 +355,15 @@ fun AddTransactionScreen(
                             SavingsGoal(
                                 name = name,
                                 targetAmount = targetAmount,
-                                deadline = deadline,
-                                createdAt = LocalDate.now()
+                                deadline = deadline
                             )
                         )
                         selectedSavingsGoalId = newGoalId
+
+                        if (!isGuestMode) {
+                            SyncManager.triggerImmediateSync(context)
+                        }
+
                         showAddGoalDialog = false
                     }
                 }
@@ -501,6 +512,10 @@ fun AddTransactionScreen(
                                         newCategoryName = ""
                                         showNewCategoryDialog = false
                                         showTagDialog = true
+
+                                        if (!isGuestMode) {
+                                            SyncManager.triggerImmediateSync(context)
+                                        }
                                     }
                                 }
                             }
@@ -560,6 +575,10 @@ fun AddTransactionScreen(
                                         selectedTagId = tagId
                                         newTagName = ""
                                         showNewTagDialog = false
+
+                                        if (!isGuestMode) {
+                                            SyncManager.triggerImmediateSync(context)
+                                        }
                                     }
                                 }
                             }

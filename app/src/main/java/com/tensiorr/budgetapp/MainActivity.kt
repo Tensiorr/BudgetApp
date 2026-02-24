@@ -10,13 +10,17 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -25,14 +29,21 @@ import com.tensiorr.budgetapp.data.entity.Transaction
 import com.tensiorr.budgetapp.data.entity.TransactionTagCrossRef
 import com.tensiorr.budgetapp.data.entity.TransactionType
 import com.tensiorr.budgetapp.data.preferences.UserPreferences
+import com.tensiorr.budgetapp.data.repository.SyncRepository
+import com.tensiorr.budgetapp.ui.dialogs.GuestDataDialog
 import com.tensiorr.budgetapp.ui.dialogs.UpdateDialog
 import com.tensiorr.budgetapp.ui.models.DateFormatOption
 import com.tensiorr.budgetapp.ui.screens.*
+import com.tensiorr.budgetapp.ui.screens.auth.LoginScreen
+import com.tensiorr.budgetapp.ui.screens.auth.RegisterScreen
 import com.tensiorr.budgetapp.ui.theme.BudgetAppTheme
 import com.tensiorr.budgetapp.ui.theme.ThemeMode
+import com.tensiorr.budgetapp.ui.viewmodel.AuthViewModel
 import com.tensiorr.budgetapp.ui.viewmodel.UpdateUiState
 import com.tensiorr.budgetapp.ui.viewmodel.UpdateViewModel
 import com.tensiorr.budgetapp.util.ApkInstaller
+import com.tensiorr.budgetapp.util.AuthState
+import com.tensiorr.budgetapp.util.SyncManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
@@ -49,6 +60,8 @@ import java.io.File
 class MainActivity : ComponentActivity() {
 
     private var pendingApkInstall: File? = null
+
+    private val authViewModel: AuthViewModel by viewModels()
 
     private val installSettingsLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -88,6 +101,8 @@ class MainActivity : ComponentActivity() {
 
             val updateViewModel: UpdateViewModel = viewModel()
             val updateUiState by updateViewModel.uiState.collectAsState()
+            val authState by authViewModel.authState.collectAsState()
+            val isGuestMode by preferences.isGuestModeFlow.collectAsState(initial = false)
 
             LaunchedEffect(updateUiState) {
                 if (updateUiState is UpdateUiState.NeedsInstallPermission) {
@@ -96,51 +111,175 @@ class MainActivity : ComponentActivity() {
             }
 
             BudgetAppTheme(themeMode = themeMode) {
-                BudgetAppNavigation(
-                    db = db,
-                    preferences = preferences,
-                    updateViewModel = updateViewModel
-                )
+                when {
+                    isGuestMode -> {
+                        BudgetAppNavigation(
+                            db = db,
+                            preferences = preferences,
+                            updateViewModel = updateViewModel,
+                            authViewModel = authViewModel,
+                            isGuestMode = true
+                        )
 
-                UpdateDialog(
-                    uiState = updateUiState,
-                    onDownload = {
-                        if (updateUiState is UpdateUiState.UpdateAvailable) {
-                            updateViewModel.downloadAndInstall(
-                                (updateUiState as UpdateUiState.UpdateAvailable).update
-                            )
-                        }
-                    },
-                    onInstall = {
-                        if (updateUiState is UpdateUiState.ReadyToInstall) {
-                            updateViewModel.installApk(
-                                (updateUiState as UpdateUiState.ReadyToInstall).apkFile
-                            )
-                        }
-                    },
-                    onDismiss = {
-                        when (updateUiState) {
-                            is UpdateUiState.UpdateAvailable -> {
-                                updateViewModel.dismissUpdate(
-                                    (updateUiState as UpdateUiState.UpdateAvailable).update
-                                )
+                        UpdateDialog(
+                            uiState = updateUiState,
+                            onDownload = {
+                                if (updateUiState is UpdateUiState.UpdateAvailable) {
+                                    updateViewModel.downloadAndInstall(
+                                        (updateUiState as UpdateUiState.UpdateAvailable).update
+                                    )
+                                }
+                            },
+                            onInstall = {
+                                if (updateUiState is UpdateUiState.ReadyToInstall) {
+                                    updateViewModel.installApk(
+                                        (updateUiState as UpdateUiState.ReadyToInstall).apkFile
+                                    )
+                                }
+                            },
+                            onDismiss = {
+                                when (updateUiState) {
+                                    is UpdateUiState.UpdateAvailable -> {
+                                        updateViewModel.dismissUpdate(
+                                            (updateUiState as UpdateUiState.UpdateAvailable).update
+                                        )
+                                    }
+                                    else -> updateViewModel.resetState()
+                                }
+                            },
+                            onRequestInstallPermission = {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                                        data = Uri.parse("package:$packageName")
+                                    }
+                                    installSettingsLauncher.launch(intent)
+                                }
                             }
-                            else -> updateViewModel.resetState()
+                        )
+                    }
+
+                    authState is AuthState.Authenticated -> {
+                        BudgetAppNavigation(
+                            db = db,
+                            preferences = preferences,
+                            updateViewModel = updateViewModel,
+                            authViewModel = authViewModel,
+                            isGuestMode = false
+                        )
+
+                        UpdateDialog(
+                            uiState = updateUiState,
+                            onDownload = {
+                                if (updateUiState is UpdateUiState.UpdateAvailable) {
+                                    updateViewModel.downloadAndInstall(
+                                        (updateUiState as UpdateUiState.UpdateAvailable).update
+                                    )
+                                }
+                            },
+                            onInstall = {
+                                if (updateUiState is UpdateUiState.ReadyToInstall) {
+                                    updateViewModel.installApk(
+                                        (updateUiState as UpdateUiState.ReadyToInstall).apkFile
+                                    )
+                                }
+                            },
+                            onDismiss = {
+                                when (updateUiState) {
+                                    is UpdateUiState.UpdateAvailable -> {
+                                        updateViewModel.dismissUpdate(
+                                            (updateUiState as UpdateUiState.UpdateAvailable).update
+                                        )
+                                    }
+                                    else -> updateViewModel.resetState()
+                                }
+                            },
+                            onRequestInstallPermission = {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                                        data = Uri.parse("package:$packageName")
+                                    }
+                                    installSettingsLauncher.launch(intent)
+                                }
+                            }
+                        )
+                    }
+
+                    authState is AuthState.Unauthenticated || authState is AuthState.Error -> {
+                        AuthNavigation(
+                            authViewModel = authViewModel,
+                            authState = authState,
+                            preferences = preferences
+                        )
+                    }
+
+                    authState is AuthState.Loading || authState is AuthState.Idle -> {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = MaterialTheme.colorScheme.background
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        }
+                    }
+                }
+            }
+
+            val showGuestDataDialog by authViewModel.showGuestDataDialog.collectAsState()
+
+            if (showGuestDataDialog) {
+                GuestDataDialog(
+                    onKeepAndMerge = {
+                        authViewModel.handleGuestData(keepData = true) {
+                            SyncManager.schedulePeriodicSync(this@MainActivity)
+                            SyncManager.triggerFullSync(this@MainActivity)
                         }
                     },
-                    onRequestInstallPermission = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                                data = Uri.parse("package:$packageName")
-                            }
-                            installSettingsLauncher.launch(intent)
+                    onDiscardAndDownload = {
+                        authViewModel.handleGuestData(keepData = false) {
+                            SyncManager.schedulePeriodicSync(this@MainActivity)
+                            SyncManager.triggerFullSync(this@MainActivity)
                         }
+                    },
+                    onCancel = {
+                        authViewModel.hideGuestDataDialog()
+                        authViewModel.signOut(clearLocalData = false)
                     }
                 )
             }
 
             LaunchedEffect(Unit) {
                 updateViewModel.checkForUpdateSilently()
+            }
+
+            LaunchedEffect(authState, isGuestMode) {
+                when {
+                    authState is AuthState.Authenticated && !isGuestMode -> {
+                        val wasGuestBefore = preferences.wasGuestBeforeLogin()
+
+                        if (wasGuestBefore) {
+                            val hasLocalData = authViewModel.checkGuestHasData()
+
+                            if (hasLocalData) {
+                                authViewModel.showGuestDataDialog()
+                            } else {
+                                preferences.clearGuestToLoginFlag()
+                                SyncManager.schedulePeriodicSync(this@MainActivity)
+                                SyncManager.triggerFullSync(this@MainActivity)
+                            }
+                        } else {
+                            SyncManager.schedulePeriodicSync(this@MainActivity)
+                            SyncManager.triggerFullSync(this@MainActivity)
+                        }
+                    }
+
+                    isGuestMode || authState is AuthState.Unauthenticated -> {
+                        SyncManager.cancelPeriodicSync(this@MainActivity)
+                    }
+                }
             }
         }
     }
@@ -153,7 +292,9 @@ class MainActivity : ComponentActivity() {
 fun BudgetAppNavigation(
     db: AppDatabase,
     preferences: UserPreferences,
-    updateViewModel: UpdateViewModel
+    updateViewModel: UpdateViewModel,
+    authViewModel: AuthViewModel,
+    isGuestMode: Boolean = false
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     var transactionToEdit by remember { mutableStateOf<Pair<Transaction, Long?>?>(null) }
@@ -169,6 +310,9 @@ fun BudgetAppNavigation(
     val savingsGoalDao = db.savingsGoalDao()
 
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val syncRepository = remember { SyncRepository(context) }
+    val authState by authViewModel.authState.collectAsState()
 
     val transactionsWithTags = dao.getAllTransactionsWithTags()
         .collectAsState(initial = emptyList())
@@ -269,9 +413,11 @@ fun BudgetAppNavigation(
                     ManageCategoriesScreen(
                         categoryDao = categoryDao,
                         tagDao = tagDao,
-                        transactionDao = dao,
                         categories = categories.value,
-                        onNavigateBack = { showManageCategories = false }
+                        onNavigateBack = { showManageCategories = false },
+                        syncRepository = syncRepository,
+                        authViewModel = authViewModel,
+                        isGuestMode = isGuestMode
                     )
                 }
 
@@ -310,7 +456,10 @@ fun BudgetAppNavigation(
                         dateFormat = dateFormat,
                         activeGoals = activeSavingsGoals,
                         archivedGoals = archivedSavingsGoals,
-                        onNavigateBack = { showSavings = false }
+                        onNavigateBack = { showSavings = false },
+                        syncRepository = syncRepository,
+                        authViewModel = authViewModel,
+                        isGuestMode = isGuestMode
                     )
                 }
 
@@ -326,6 +475,7 @@ fun BudgetAppNavigation(
                         transactionToEdit = transactionToEdit!!.first,
                         existingTagId = transactionToEdit!!.second,
                         dateFormat = dateFormat,
+                        isGuestMode = isGuestMode,
                         onSave = { transaction, tagId ->
                             scope.launch {
                                 val oldTransaction = transactionToEdit!!.first
@@ -340,6 +490,10 @@ fun BudgetAppNavigation(
 
                                 dao.update(transaction)
 
+                                if (!isGuestMode) {
+                                    SyncManager.triggerImmediateSync(context)
+                                }
+
                                 if (transaction.type == TransactionType.SAVING &&
                                     transaction.savingsGoalId != null) {
                                     savingsGoalDao.addToGoal(
@@ -353,6 +507,10 @@ fun BudgetAppNavigation(
                                     tagDao.insertTransactionTagCrossRef(
                                         TransactionTagCrossRef(transaction.id, id)
                                     )
+                                }
+
+                                if (!isGuestMode) {
+                                    SyncManager.triggerImmediateSync(context)
                                 }
 
                                 transactionToEdit = null
@@ -378,7 +536,13 @@ fun BudgetAppNavigation(
                                         -transaction.amountInCents
                                     )
                                 }
-                                dao.delete(transaction)
+
+                                if (!isGuestMode && authState is AuthState.Authenticated) {
+                                    val userId = (authState as AuthState.Authenticated).userId
+                                    syncRepository.deleteTransaction(userId, transaction)
+                                } else {
+                                    dao.delete(transaction)
+                                }
                             }
                         },
                         onEdit = { transaction, tagId ->
@@ -404,6 +568,7 @@ fun BudgetAppNavigation(
                         tagDao = tagDao,
                         savingsGoalDao = savingsGoalDao,
                         dateFormat = dateFormat,
+                        isGuestMode = isGuestMode,
                         onSave = { transaction, tagId ->
                             scope.launch {
                                 val transactionId = dao.insert(transaction)
@@ -422,6 +587,10 @@ fun BudgetAppNavigation(
                                     )
                                 }
 
+                                if (!isGuestMode) {
+                                    SyncManager.triggerImmediateSync(context)
+                                }
+
                                 navigateToTab(0)
                             }
                         }
@@ -434,7 +603,10 @@ fun BudgetAppNavigation(
                         savingsGoalDao = savingsGoalDao,
                         dateFormat = dateFormat,
                         activeGoals = activeSavingsGoals,
-                        archivedGoals = archivedSavingsGoals
+                        archivedGoals = archivedSavingsGoals,
+                        syncRepository = syncRepository,
+                        authViewModel = authViewModel,
+                        isGuestMode = isGuestMode
                     )
                 }
 
@@ -447,10 +619,53 @@ fun BudgetAppNavigation(
                         onNavigateToDateFormat = { showDateFormatSelection = true },
                         onCheckForUpdates = { updateViewModel.checkForUpdate() },
                         themeDisplayText = themeDisplayText,
-                        dateFormatDisplayText = currentDateFormatString
+                        dateFormatDisplayText = currentDateFormatString,
+                        authViewModel = authViewModel,
+                        isGuestMode = isGuestMode,
+                        preferences = preferences
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Authentication navigation handling login and registration screens.
+ */
+@Composable
+fun AuthNavigation(
+    authViewModel: AuthViewModel,
+    authState: AuthState,
+    preferences: UserPreferences
+) {
+    var showRegister by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        if (showRegister) {
+            BackHandler {
+                showRegister = false
+            }
+            RegisterScreen(
+                authViewModel = authViewModel,
+                authState = authState,
+                onNavigateToLogin = { showRegister = false }
+            )
+        } else {
+            LoginScreen(
+                authViewModel = authViewModel,
+                authState = authState,
+                onNavigateToRegister = { showRegister = true },
+                onContinueAsGuest = {
+                    scope.launch {
+                        preferences.setGuestMode(true)
+                    }
+                }
+            )
         }
     }
 }

@@ -31,4 +31,6 @@ data class Tag(
     val name: String,
     val transactionType: TransactionType,
     val categoryId: Long,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
 )
